@@ -1,0 +1,28 @@
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, Roboto, sans-serif;
+  background: #f3f4f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.MuiPaper-root {
+  border-radius: 16px !important;
+}
+
+.MuiTypography-root {
+  font-size: 14px;
+}
