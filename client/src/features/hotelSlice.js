@@ -62,10 +62,11 @@ const hotelSlice = createSlice({
       })
       .addCase(loadData.fulfilled, (state, action) => {
         state.loading = false;
-        state.rooms = action.payload.rooms;
-        state.customers = action.payload.customers;
-        state.bookings = action.payload.bookings;
-        state.invoices = action.payload.invoices;
+        const roomsPayload = action.payload.rooms;
+        state.rooms = Array.isArray(roomsPayload) ? roomsPayload : roomsPayload?.rooms || [];
+        state.customers = Array.isArray(action.payload.customers) ? action.payload.customers : [];
+        state.bookings = Array.isArray(action.payload.bookings) ? action.payload.bookings : [];
+        state.invoices = Array.isArray(action.payload.invoices) ? action.payload.invoices : [];
       })
       .addCase(loadData.rejected, (state, action) => {
         state.loading = false;

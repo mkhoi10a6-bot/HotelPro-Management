@@ -35,16 +35,6 @@ export default function BookingPage() {
     dispatch(loadData()).unwrap().catch((err) => console.error("Initial load failed:", err));
   }, [dispatch]);
 
-  // Debug State Mismatch: Kiểm tra dữ liệu phòng 103
-  useEffect(() => {
-    const room103Local = ROOMS.find(r => r.id === 103);
-    const room103Store = roomsFromStore?.find(r => Number(r.id) === 103);
-    console.log("Debug Room 103:", {
-      local: room103Local?.status,
-      store: room103Store?.status || "Not found in store (Default: Available)"
-    });
-  }, [roomsFromStore]);
-
   // Đồng bộ thông tin user khi Redux cập nhật để tự động điền form
   useEffect(() => {
     if (user) {
