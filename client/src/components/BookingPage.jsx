@@ -44,6 +44,14 @@ export default function BookingPage() {
   const user = hotelState?.user || null;
   const roomsFromStore = hotelState?.rooms || [];
   const bookingsFromStore = hotelState?.bookings || [];
+  const initialFormState = {
+    name: user?.name || "",
+    phone: user?.phone || "",
+    checkIn: "",
+    checkOut: "",
+    roomType: "Standard",
+    roomNumber: ""
+  };
 
   // Hàm tính toán trạng thái phòng động dựa trên lịch sử đặt phòng
   const isRoomAvailable = (room, bookings) => {
@@ -70,10 +78,7 @@ export default function BookingPage() {
   };
 
   // 1. Group all useState hooks at the top
-  const [form, setForm] = useState({
-    name: user?.name || "", phone: user?.phone || "",
-    checkIn: "", checkOut: "", roomType: "Standard", roomNumber: ""
-  });
+  const [form, setForm] = useState(initialFormState);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedRoomForPayment, setSelectedRoomForPayment] = useState(null);
   const [showForm, setShowForm] = useState(false);

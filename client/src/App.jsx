@@ -17,6 +17,55 @@ import ChangePasswordView from "./components/ChangePasswordView";
 // New: Unauthorized component
 import Unauthorized from "./components/Unauthorized";
 
+function getStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "null");
+  } catch {
+    localStorage.removeItem("user");
+    return null;
+  }
+}
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.error("App render failed:", error);
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
+        <div className="max-w-md rounded-[28px] border border-white/10 bg-white/10 p-6 text-center shadow-2xl">
+          <h1 className="text-2xl font-black">Không tải được trang</h1>
+          <p className="mt-3 text-sm font-medium leading-6 text-slate-300">
+            Phiên đăng nhập hoặc dữ liệu trình duyệt đang lỗi. Hãy đăng nhập lại để đồng bộ dữ liệu mới.
+          </p>
+          <button
+            onClick={() => {
+              localStorage.removeItem("token");
+              localStorage.removeItem("user");
+              window.location.href = "/login";
+            }}
+            className="mt-5 rounded-2xl bg-sky-500 px-5 py-3 text-sm font-black text-white"
+          >
+            Về trang đăng nhập
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 // 1. RequireAuth: Thành phần bảo vệ nghiêm ngặt (Xác thực & Phân quyền)
 function RequireAuth({ allowedRoles }) {
   const hotelState = useSelector((s) => s?.hotel || {});
@@ -24,7 +73,7 @@ function RequireAuth({ allowedRoles }) {
   const location = useLocation();
 
   const tokenInStorage = localStorage.getItem("token");
-  const userInStorage = JSON.parse(localStorage.getItem("user") || "null");
+  const userInStorage = getStoredUser();
 
   if (tokenInStorage && !isAuthenticated) {
     return (
@@ -228,7 +277,7 @@ function AppContent() {
   const { user, isAuthenticated } = useSelector((s) => s.hotel);
 
   // Xác định quyền Admin an toàn hơn
-  const userInStorage = JSON.parse(localStorage.getItem("user") || "null");
+  const userInStorage = getStoredUser();
   const isAdmin = (user?.role || userInStorage?.role) === "admin";
 
   return (
@@ -291,13 +340,13 @@ export default function App() {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    const savedUser = localStorage.getItem("user");
+    const savedUser = getStoredUser();
     
     // logic gate to recover session before app becomes "ready"
     if (token && !isAuthenticated) {
       try {
         if (savedUser) {
-          dispatch(setAuth({ user: JSON.parse(savedUser), token }));
+          dispatch(setAuth({ user: savedUser, token }));
         } else {
           const segment = token.split(".")[1];
           if (segment) {
@@ -331,13 +380,15 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true
-      }}
-    >
-      <AppContent />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true
+        }}
+      >
+        <AppContent />
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
