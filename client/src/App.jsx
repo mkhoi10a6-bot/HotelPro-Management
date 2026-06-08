@@ -98,6 +98,23 @@ function RequireAuth({ allowedRoles }) {
   return <Outlet />;
 }
 
+function HomeRedirect() {
+  const hotelState = useSelector((s) => s?.hotel || {});
+  const storedUser = getStoredUser();
+  const token = localStorage.getItem("token");
+  const role = hotelState.user?.role || storedUser?.role;
+
+  if (!hotelState.isAuthenticated && !token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!role) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to={role === "admin" ? "/admin/dashboard" : "/booking"} replace />;
+}
+
 // 2. AppShell: Giao diện khung dùng Outlet để render nội dung con
 function AppShell() {
   const dispatch = useDispatch();
@@ -283,14 +300,12 @@ function AppContent() {
   return (
     <Routes>
       {/* PUBLIC ROUTES */}
+      <Route path="/" element={<HomeRedirect />} />
       <Route path="/login" element={<Login />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
 
       {/* PROTECTED ROUTES (Cần đăng nhập) */}
       <Route element={<RequireAuth />}>
-        {/* Điều hướng gốc dựa trên Role */}
-        <Route path="/" element={<Navigate to={isAdmin ? "/admin/dashboard" : "/booking"} replace />} />
-
         {/* Layout chung AppShell cho các trang bên trong ứng dụng */}
         <Route element={<AppShell />}>
 
