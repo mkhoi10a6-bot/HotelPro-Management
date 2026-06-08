@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_URL } from "../services/config";
 
 const departments = ["Tiếp tân", "Dọn phòng", "Bảo trì", "Kế toán", "Nhân sự", "Quản lý"];
 const positions = ["Giám đốc", "Trưởng phòng", "Nhân viên", "Thực tập sinh"];
@@ -28,7 +29,7 @@ export default function EmployeeView() {
   const loadEmployees = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/employees", {
+      const response = await fetch(`${API_URL}/employees`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -48,7 +49,7 @@ export default function EmployeeView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/employees", {
+      const response = await fetch(`${API_URL}/employees`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -87,7 +88,7 @@ export default function EmployeeView() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`/api/employees/${id}`, {
+      const response = await fetch(`${API_URL}/employees/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

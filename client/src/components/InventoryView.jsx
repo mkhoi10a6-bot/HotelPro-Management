@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_URL } from "../services/config";
 
 export default function InventoryView() {
   const [items, setItems] = useState([]);
@@ -21,7 +22,7 @@ export default function InventoryView() {
   const loadItems = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/inventory", {
+      const response = await fetch(`${API_URL}/inventory`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -41,7 +42,7 @@ export default function InventoryView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/inventory", {
+      const response = await fetch(`${API_URL}/inventory`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -76,7 +77,7 @@ export default function InventoryView() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`/api/inventory/${id}`, {
+      const response = await fetch(`${API_URL}/inventory/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

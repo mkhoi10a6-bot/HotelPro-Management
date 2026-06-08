@@ -24,12 +24,12 @@ const SYSTEM_INSTRUCTION = `Role: You are the Hotel System Core Engine. Your pri
 - Prevent unauthorized access: Only process orders if a Room Number is identified.
 - Safety: If the system cannot calculate a value, return "Đang cập nhật..." instead of an error.
 
-Tone: Professional, precise, and system-oriented. Always identify as "HotelPro".`;
+Tone: Professional, precise, and system-oriented. Always identify as "Mây An Nhiên".`;
 
 export default function ChatPageView() {
   const { user } = useSelector((s) => s.hotel);
 
-  const aiAvatar = "https://api.dicebear.com/7.x/bottts/svg?seed=HotelPro&backgroundColor=d1d4f9";
+  const aiAvatar = "https://api.dicebear.com/7.x/bottts/svg?seed=MayAnNhien&backgroundColor=d1d4f9";
 
   const getUserAvatar = () => {
     const name = user?.name || "Guest";
@@ -50,7 +50,7 @@ export default function ChatPageView() {
   const userAvatar = getUserAvatar();
 
   const [messages, setMessages] = useState([
-    { text: "Chào mừng bạn đến với HotelPro! Tôi là trợ lý AI, tôi có thể giúp gì cho bạn hôm nay?", isUser: false }
+    { text: "Chào mừng bạn đến với Mây An Nhiên! Tôi là trợ lý AI, tôi có thể giúp gì cho bạn hôm nay?", isUser: false }
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);

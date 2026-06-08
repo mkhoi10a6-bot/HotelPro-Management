@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { loadData } from "../features/hotelSlice";
+import { API_URL } from "../services/config";
 
 export default function PaymentView() {
   const dispatch = useDispatch();
@@ -16,7 +17,7 @@ export default function PaymentView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`/api/invoices/${invoiceId}`, {
+      const response = await fetch(`${API_URL}/invoices/${invoiceId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

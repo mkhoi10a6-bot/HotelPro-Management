@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { loadData } from "../features/hotelSlice";
+import { loadData } from "../features/hotelSlice"; // Giả định slice đã có các action nhỏ lẻ hơn
+import { API_URL } from "../services/config";
 
 const ROOMS = [
   { id: 101, type: "Standard", price: 550000, summary: "Phòng Standard tiện nghi, view phố thoáng đãng.", image: "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&q=80&w=400", status: "available" },
@@ -19,71 +20,111 @@ const ROOMS = [
 const AMENITIES_BY_TYPE = {
   Standard: ["Wifi tốc độ cao", "Điều hòa nhiệt độ", "Smart TV", "Nước suối miễn phí"],
   VIP: ["Tiện ích Standard", "Ban công riêng", "Mini bar", "Áo choàng tắm", "Bao gồm ăn sáng"],
-  Suite: ["Tiện ích VIP", "Bồn tắm nằm", "View thành phố", "Nhận phòng ưu tiên", "Voucher Massage miễn phí"]
+  Suite: ["Tiện ích VIP", "Bồn tắm nằm", "View thành phố", "Nhận phòng ưu tiên", "Voucher Massage miễn phí"],
 };
+
+const ROOM_IMAGE_FALLBACKS = {
+  Standard: "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&q=80&w=800",
+  VIP: "https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&q=80&w=800",
+  Suite: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&q=80&w=800",
+  "Royal Suite": "https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&q=80&w=800",
+};
+
+function getRoomImage(room) {
+  return room?.imageUrl || room?.image_url || room?.image || ROOM_IMAGE_FALLBACKS[room?.type] || ROOM_IMAGE_FALLBACKS.Standard;
+}
 
 export default function BookingPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const formRef = useRef(null);
   
   // Defensive Selection: Prevents crashes if Redux state is null or undefined
   const hotelState = useSelector((state) => state?.hotel || {});
   const user = hotelState?.user || null;
   const roomsFromStore = hotelState?.rooms || [];
+  const bookingsFromStore = hotelState?.bookings || [];
 
-  useEffect(() => {
-    dispatch(loadData()).unwrap().catch((err) => console.error("Initial load failed:", err));
-  }, [dispatch]);
+  // Hàm tính toán trạng thái phòng động dựa trên lịch sử đặt phòng
+  const isRoomAvailable = (room, bookings) => {
+    // Nếu admin đánh dấu bảo trì, ưu tiên hiển thị bảo trì
+    if (room?.status === "maintenance") return false;
 
-  // Đồng bộ thông tin user khi Redux cập nhật để tự động điền form
-  useEffect(() => {
-    if (user) {
-      setForm((prev) => ({
-        ...prev,
-        name: user?.name || prev.name,
-        phone: user?.phone || prev.phone
-      }));
-    }
-  }, [user]);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // So sánh theo ngày
 
-  const displayRooms = (ROOMS || []).map(localRoom => {
-    const storeRoom = Array.isArray(roomsFromStore)
-      ? roomsFromStore.find(r => Number(r?.id || r?.roomId) === Number(localRoom?.id))
-      : null;
-    
-    // Strict Status Check: Ưu tiên store, nếu không có mặc định là available
-    return {
-      ...localRoom,
-      status: storeRoom ? (storeRoom?.status || "available") : "available"
-    };
-  });
+    // Tìm các đơn đặt phòng của phòng này mà chưa bị hủy
+    const roomBookings = bookings.filter(b =>
+      Number(b.room_id || b.roomId) === Number(room.id || room.number) &&
+      !["Cancelled", "cancelled"].includes(b.status)
+    );
 
-  const initialFormState = { 
-    name: user?.name || "", 
-    phone: user?.phone || "", 
-    checkIn: "", 
-    checkOut: "", 
-    roomType: "Standard",
-    roomNumber: ""
+    // Kiểm tra xem có booking nào đang chiếm dụng phòng ở thời điểm hiện tại không
+    const isOccupiedNow = roomBookings.some(b => {
+      const checkIn = new Date(b.check_in || b.checkIn);
+      const checkOut = new Date(b.check_out || b.checkOut);
+      return now >= checkIn && now < checkOut;
+    });
+
+    return !isOccupiedNow;
   };
 
-  const [form, setForm] = useState(initialFormState);
-  const [showPayment, setShowPayment] = useState(false);
+  // 1. Group all useState hooks at the top
+  const [form, setForm] = useState({
+    name: user?.name || "", phone: user?.phone || "",
+    checkIn: "", checkOut: "", roomType: "Standard", roomNumber: ""
+  });
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedRoomForPayment, setSelectedRoomForPayment] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [detailRoom, setDetailRoom] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Auto-Redirect Logic: Triggers 3 seconds after isSuccess becomes true
+  // 2. Define displayRooms within scope but before any logic using it
+  const actualStoreRooms = Array.isArray(roomsFromStore) ? roomsFromStore : (roomsFromStore?.rooms || []);
+  const sourceRooms = actualStoreRooms.length > 0 ? actualStoreRooms : ROOMS;
+  const displayRooms = sourceRooms.map(sourceRoom => {
+    const localRoom = ROOMS.find(r => Number(r?.id) === Number(sourceRoom?.id || sourceRoom?.number)) || {};
+    const roomId = Number(sourceRoom?.id || sourceRoom?.number || localRoom?.id);
+
+    // Tính toán trạng thái động thay vì dùng thuộc tính status tĩnh
+    const available = isRoomAvailable(sourceRoom || localRoom, bookingsFromStore);
+    let status = available ? "available" : (sourceRoom?.status || "occupied");
+
+    // Giữ nguyên logic đặc biệt cũ cho phòng 302 như yêu cầu
+    if (roomId === 302) status = "available";
+
+    return {
+      ...localRoom,
+      ...sourceRoom,
+      id: roomId,
+      number: sourceRoom?.number || String(roomId),
+      summary: localRoom.summary || `${sourceRoom?.type || "Standard"} tiện nghi, sạch sẽ và phù hợp cho kỳ nghỉ của bạn.`,
+      image: getRoomImage({ ...localRoom, ...sourceRoom }),
+      status: status
+    };
+  });
+
+  useEffect(() => {
+    dispatch(loadData()).unwrap().catch(() => {});
+  }, [dispatch]);
+
+  // 3. Auto-scroll logic (Corrected hook dependency)
+  useEffect(() => {
+    if (showForm && formRef.current) {
+      formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [showForm]);
+
   useEffect(() => {
     let timer;
     if (isSuccess) {
       timer = setTimeout(() => {
         setIsSuccess(false);
-        setShowPayment(false);
+        setShowPaymentModal(false);
         setShowForm(false);
-        setForm(initialFormState);
         navigate("/");
       }, 3000);
     }
@@ -108,22 +149,23 @@ export default function BookingPage() {
     return { nights: validNights, total: validNights * pricePerNight, isValid: true };
   };
 
-  const handleBook = () => {
+  // Bước 2: Hàm xử lý khi bấm "Đặt phòng" (Thanh toán)
+  const handleBookingClick = () => {
     const { isValid } = calculateStay();
-    if (!isValid) return; // Silent guard, button handles disabled state
-    setShowPayment(true);
+    if (!isValid) return;
+
+    setSelectedRoomForPayment(displayRooms.find(r => Number(r.id) === Number(form.roomNumber)));
+    setShowPaymentModal(true);
   };
 
   const triggerBooking = (room) => {
     if (room?.status !== 'available') return;
     setForm({ ...form, roomType: room?.type, roomNumber: room?.id });
     setShowForm(true);
-    // Tự động cuộn xuống form thông tin
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
 
-  // Transaction logic with simulated 2-second delay
-  const executeTransaction = async () => {
+  // Hàm xác nhận thanh toán và gọi API đặt phòng
+  const handlePaymentConfirm = async () => {
     const { total, nights } = calculateStay();
     const token = localStorage.getItem("token");
 
@@ -136,7 +178,7 @@ export default function BookingPage() {
       // Simulated 2-second delay for transaction processing as requested
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const res = await fetch("/api/bookings", {
+      const res = await fetch(`${API_URL}/bookings`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -159,7 +201,7 @@ export default function BookingPage() {
         setIsSuccess(true);
         
         // State Reset after success
-        setShowPayment(false);
+        setShowPaymentModal(false);
         setShowForm(false);
         setForm(initialFormState); // Reset form về trạng thái trống hoặc thông tin user
 
@@ -199,7 +241,7 @@ export default function BookingPage() {
       {isAdmin && (
         <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex justify-between items-center animate-in fade-in slide-in-from-top-4">
           <p className="text-amber-800 text-sm font-medium">Bạn đang đăng nhập với quyền <strong>Quản trị viên</strong></p>
-          <button onClick={() => navigate('/')} className="bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-700 transition">
+          <button onClick={() => navigate('/admin/dashboard')} className="bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-700 transition">
             ĐI ĐẾN TRANG QUẢN LÝ
           </button>
         </div>
@@ -215,8 +257,9 @@ export default function BookingPage() {
                 <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${
                   room?.status === 'available' ? 'bg-rose-500' : 'bg-emerald-500'
                 }`} />
-                <h3 className="text-lg font-bold text-slate-800">Phòng {room.id}</h3>
+                <h3 className="text-lg font-bold text-slate-800">Phòng {room.number || room.id}</h3>
                 <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
+                  room?.type === 'Royal Suite' ? 'bg-yellow-100 text-yellow-700' :
                   room?.type === 'Suite' ? 'bg-purple-100 text-purple-600' :
                   room?.type === 'VIP' ? 'bg-amber-100 text-amber-600' :
                   'bg-sky-100 text-sky-600'
@@ -249,9 +292,12 @@ export default function BookingPage() {
             {/* Bottom Right Image */}
             <div className="absolute bottom-0 right-0 w-24 h-24 overflow-hidden rounded-tl-3xl border-t-4 border-l-4 border-white shadow-2xl">
               <img 
-                src={room?.image} 
-                alt={`Phòng ${room.id}`} 
+                src={getRoomImage(room)}
+                alt={`Phòng ${room.number || room.id}`}
                 className="w-full h-full object-cover group-hover:scale-125 transition-transform duration-700" 
+                onError={(e) => {
+                  e.currentTarget.src = ROOM_IMAGE_FALLBACKS.Standard;
+                }}
               />
               {room.status !== 'available' && (
                 <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] flex items-center justify-center">
@@ -265,7 +311,7 @@ export default function BookingPage() {
 
       {/* Section 2: Customer Info Form (Trình diễn khi trigger) */}
       {showForm && (
-        <div className="max-w-2xl mx-auto bg-white rounded-3xl p-8 shadow-2xl border border-sky-100 animate-in fade-in slide-in-from-bottom-8 duration-500">
+        <div ref={formRef} className="max-w-2xl mx-auto bg-white rounded-3xl p-8 shadow-2xl border border-sky-100 animate-in fade-in slide-in-from-bottom-8 duration-500">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-slate-800">Đặt phòng {form.roomNumber}</h2>
             <span className="bg-sky-100 text-sky-700 px-4 py-1 rounded-full text-xs font-bold">Hạng {form.roomType}</span>
@@ -301,7 +347,7 @@ export default function BookingPage() {
               </div>
             )}
 
-            <button onClick={handleBook} disabled={!isValid} className="w-full bg-sky-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-sky-600/30 hover:bg-sky-700 transition-all active:scale-95 disabled:opacity-50 disabled:grayscale">
+            <button onClick={handleBookingClick} disabled={!isValid} className="w-full bg-sky-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-sky-600/30 hover:bg-sky-700 transition-all active:scale-95 disabled:opacity-50 disabled:grayscale">
               {isValid ? `THANH TOÁN ${total.toLocaleString("vi-VN")} VNĐ` : "VUI LÒNG CHỌN NGÀY HỢP LỆ"}
             </button>
           </div>
@@ -335,10 +381,11 @@ export default function BookingPage() {
         </div>
       )}
 
-      {showPayment && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-[120]">
+      {/* Bước 3: Giao diện Modal QR */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] backdrop-blur-sm">
           {isSuccess ? (
-            <div className="bg-white rounded-[40px] p-12 max-w-md w-full shadow-2xl text-center animate-in zoom-in duration-500">
+            <div className="bg-white p-12 rounded-[40px] max-w-md w-full shadow-2xl text-center animate-in zoom-in duration-500">
               <div className="w-24 h-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -348,27 +395,39 @@ export default function BookingPage() {
               <p className="text-slate-600 font-medium leading-relaxed">Đặt phòng thành công.<br />Đang quay lại trang chủ...</p>
             </div>
           ) : (
-            <div className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl">
-              <h3 className="text-xl font-black mb-2 text-center text-slate-800">Quét mã QR để đặt phòng</h3>
-              <p className="text-center text-slate-400 text-sm mb-6">Vui lòng hoàn tất chuyển khoản để kích hoạt đặt phòng.</p>
-              
-              <div className="text-center">
-                <div className="bg-slate-50 p-4 rounded-2xl inline-block border-2 border-slate-100 mb-4">
-                  <img src="/image_cf3bf8.jpg" alt="QR Payment" className="w-56 h-56 mx-auto object-cover rounded-lg" onError={(e) => e.target.src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=HotelPayment"} />
-                </div>
-                <p className="text-[10px] text-slate-400 italic mb-6">Nội dung chuyển khoản: HotelPro Phòng {form.roomNumber}</p>
+            <div className="bg-white p-6 rounded-3xl shadow-xl max-w-sm w-full text-center border border-slate-100">
+              <h3 className="text-xl font-bold mb-4 text-slate-800">Thanh toán đặt phòng</h3>
+              <p className="mb-1 text-slate-600 font-medium">Phòng: {selectedRoomForPayment?.id}</p>
+              <p className="mb-4 text-sky-600 font-black text-lg">{total.toLocaleString("vi-VN")} VNĐ</p>
+
+              <div className="flex justify-center mb-6">
+                <img
+                  src="https://img.vietqr.io/image/AGRIBANK-1805205139140-compact2.png?accountName=PHAM%20MINH%20KHOI"
+                  alt="QR Code thanh toán"
+                  className="w-64 h-64 border-2 border-slate-50 p-2 rounded-2xl"
+                />
               </div>
 
               {errorMsg && (
-                <div className="mb-4 p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs font-medium animate-shake">
+                <div className="mb-4 p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs font-medium">
                   ⚠️ {errorMsg}
                 </div>
               )}
 
-              <div className="flex gap-4 mt-8">
-                <button onClick={() => { setShowPayment(false); setErrorMsg(""); }} className="flex-1 py-3 border rounded-xl font-medium">Hủy</button>
-                <button onClick={executeTransaction} disabled={loading} className="flex-1 py-4 bg-sky-600 text-white rounded-2xl font-bold shadow-lg shadow-sky-600/20 active:scale-95 transition-all disabled:opacity-50">
-                  {loading ? "Đang xử lý..." : "Xác nhận thanh toán thành công"}
+              <div className="space-y-3">
+                <button
+                  onClick={handlePaymentConfirm}
+                  disabled={loading}
+                  className="w-full bg-green-600 text-white py-4 rounded-2xl hover:bg-green-700 font-bold shadow-lg shadow-green-600/20 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {loading ? "Đang xác thực..." : "Xác nhận đã chuyển khoản"}
+                </button>
+
+                <button
+                  onClick={() => { setShowPaymentModal(false); setErrorMsg(""); }}
+                  className="w-full bg-slate-100 text-slate-500 py-3 rounded-2xl hover:bg-slate-200 font-semibold transition"
+                >
+                  Hủy bỏ
                 </button>
               </div>
             </div>

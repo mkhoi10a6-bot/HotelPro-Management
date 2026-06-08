@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_URL } from "../services/config";
 
 export default function ContactMessagesView() {
   const [rows, setRows] = useState([]);
@@ -9,7 +10,7 @@ export default function ContactMessagesView() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/admin/contact-messages", {
+      const res = await fetch(`${API_URL}/admin/contact-messages`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const data = await res.json();

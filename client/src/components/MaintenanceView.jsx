@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
+import { API_URL } from "../services/config";
 
 const priorities = [
   { value: "low", label: "Thấp", color: "bg-blue-100 text-blue-800" },
@@ -35,7 +36,7 @@ export default function MaintenanceView() {
   const loadRequests = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/maintenance", {
+      const response = await fetch(`${API_URL}/maintenance`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -55,7 +56,7 @@ export default function MaintenanceView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/maintenance", {
+      const response = await fetch(`${API_URL}/maintenance`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -89,7 +90,7 @@ export default function MaintenanceView() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`/api/maintenance/${id}`, {
+      const response = await fetch(`${API_URL}/maintenance/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

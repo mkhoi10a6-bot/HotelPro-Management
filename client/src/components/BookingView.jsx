@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { parseISO } from "date-fns";
 import { loadData } from "../features/hotelSlice";
+import { API_URL } from "../services/config";
 
 function getRoomLabel(room) {
   return `${room.number} - ${room.type} (${room.price.toLocaleString("vi-VN")} ₫)`;
@@ -34,10 +35,9 @@ function getBookingNights(checkIn, checkOut) {
   return Number.isFinite(nights) && nights > 0 ? nights : 0;
 }
 
-function buildVietQrUrl({ amount, roomNumber, checkIn }) {
-  const addInfo = encodeURIComponent(`HOTELPRO PHONG ${roomNumber || ""} ${checkIn || ""}`.trim());
+function buildVietQrUrl() {
   const accountName = encodeURIComponent(bankAccount.accountName);
-  return `https://img.vietqr.io/image/${bankAccount.bankId}-${bankAccount.accountNumber}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${accountName}`;
+  return `https://img.vietqr.io/image/${bankAccount.bankId}-${bankAccount.accountNumber}-compact2.png?accountName=${accountName}`;
 }
 
 export default function BookingView() {
@@ -123,7 +123,7 @@ export default function BookingView() {
       let bookingCustomerId = validation.customerId;
 
       if (user?.role === "customer" && !bookingCustomerId) {
-        const customerResponse = await fetch("/api/customers", {
+        const customerResponse = await fetch(`${API_URL}/customers`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -144,7 +144,7 @@ export default function BookingView() {
         bookingCustomerId = customerData.id;
       }
 
-      const response = await fetch("/api/bookings", {
+      const response = await fetch(`${API_URL}/bookings`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -521,7 +521,7 @@ export default function BookingView() {
                 Số tiền: {bookingTotal.toLocaleString("vi-VN")} ₫
               </p>
               <p className="text-slate-500">
-                Nội dung: HOTELPRO PHONG {selectedRoom.number} {form.check_in}
+                Nội dung: MAYANNHIEN PHONG {selectedRoom.number} {form.check_in}
               </p>
             </div>
 

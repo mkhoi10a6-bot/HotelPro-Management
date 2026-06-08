@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
+import { API_URL } from "../services/config";
 
 const cleaningStatuses = [
   { value: "pending", label: "Chưa dọn", color: "bg-yellow-100 text-yellow-800" },
@@ -30,7 +31,7 @@ export default function HousekeepingView() {
   const loadSchedule = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/housekeeping", {
+      const response = await fetch(`${API_URL}/housekeeping`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -52,8 +53,8 @@ export default function HousekeepingView() {
       const token = localStorage.getItem("token");
       const method = selectedRoom ? "PUT" : "POST";
       const url = selectedRoom
-        ? `/api/housekeeping/${selectedRoom.id}`
-        : "/api/housekeeping";
+        ? `${API_URL}/housekeeping/${selectedRoom.id}`
+        : `${API_URL}/housekeeping`;
 
       const response = await fetch(url, {
         method,
@@ -96,7 +97,7 @@ export default function HousekeepingView() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`/api/housekeeping/${id}`, {
+      const response = await fetch(`${API_URL}/housekeeping/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

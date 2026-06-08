@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_URL } from "../services/config";
 
 export default function UsersView() {
   const [users, setUsers] = useState([]);
@@ -20,7 +21,7 @@ export default function UsersView() {
   const loadUsers = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/users", {
+      const response = await fetch(`${API_URL}/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -40,7 +41,7 @@ export default function UsersView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/users", {
+      const response = await fetch(`${API_URL}/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -69,7 +70,7 @@ export default function UsersView() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`/api/users/${userId}`, {
+      const response = await fetch(`${API_URL}/users/${userId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

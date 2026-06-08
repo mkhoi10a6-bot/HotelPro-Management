@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { API_URL } from "../services/config";
 
-const BOT_ID = "hotelpro-ai-assistant";
+const BOT_ID = "may-an-nhien-ai-assistant";
 
 const styles = {
   widget: "fixed bottom-4 right-4 z-[200] w-[92%] max-w-[360px]",
@@ -54,7 +55,7 @@ export default function ChatbotWidget() {
   }, [messages, open]);
 
   async function callBackendRespond(payload) {
-    const res = await fetch("/api/chatbot/respond", {
+    const res = await fetch(`${API_URL}/chatbot/respond`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -126,8 +127,8 @@ export default function ChatbotWidget() {
           className="flex items-center gap-3 rounded-full bg-slate-900 px-4 py-3 text-white shadow-2xl"
           aria-label="Open chatbot"
         >
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10">🤖</span>
-          <span className="hidden text-sm font-semibold sm:inline">Chat với HotelPro</span>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10">AI</span>
+          <span className="hidden text-sm font-semibold sm:inline">Chat với Mây An Nhiên</span>
         </button>
       )}
 
@@ -135,7 +136,7 @@ export default function ChatbotWidget() {
         <div className={styles.panel}>
           <div className={styles.header}>
             <div>
-              <div className="text-sm font-semibold">HotelPro Assistant</div>
+              <div className="text-sm font-semibold">Mây An Nhiên Assistant</div>
               <div className="text-xs text-slate-300">Trả lời nhanh • Thực đơn • FAQ</div>
             </div>
             <button
@@ -212,4 +213,3 @@ export default function ChatbotWidget() {
     </div>
   );
 }
-

@@ -2,18 +2,24 @@ import { useState, useEffect, useCallback } from "react";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { setAuth } from "../features/hotelSlice";
+import { API_URL } from "../services/config";
 
 const initialCredentials = { email: "", password: "", name: "", phone: "" };
+const GMAIL_REGEX = /^[a-z0-9._%+-]+@gmail\.com$/i;
+const ROOM_IMAGE_FALLBACK = "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&q=80&w=800";
 
-const PUBLIC_API = "/api/public";
+const PUBLIC_API = `${API_URL}/public`;
 
 export default function Login() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [mode, setMode] = useState("login");
   const [credentials, setCredentials] = useState(initialCredentials);
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [activePanel, setActivePanel] = useState(null);
   const [publicRooms, setPublicRooms] = useState([]);
   const [publicRoomsLoading, setPublicRoomsLoading] = useState(false);
@@ -80,16 +86,38 @@ export default function Login() {
   const handleSubmit = async (event) => {
     event?.preventDefault?.();
     setError("");
+    const normalizedEmail = credentials.email.trim().toLowerCase();
+
+    if (!GMAIL_REGEX.test(normalizedEmail)) {
+      setError("Email phải đúng cú pháp và dùng đuôi @gmail.com.");
+      return;
+    }
+
+    if (!credentials.password) {
+      setError("Vui lòng nhập mật khẩu.");
+      return;
+    }
+
+    if (mode === "register" && !credentials.name.trim()) {
+      setError("Vui lòng nhập họ và tên.");
+      return;
+    }
+
+    if (mode === "register" && !credentials.phone.trim()) {
+      setError("Vui lòng nhập số điện thoại.");
+      return;
+    }
+
     setLoading(true);
     try {
-      const url = mode === "login" ? "/api/login" : `/api/auth/${mode}`;
+      const url = mode === "login" ? `${API_URL}/login` : `${API_URL}/auth/register`;
       const payload = {
-        email: credentials.email,
+        email: normalizedEmail,
         password: credentials.password,
       };
       if (mode === "register") {
-        payload.name = credentials.name;
-        payload.phone = credentials.phone;
+        payload.name = credentials.name.trim();
+        payload.phone = credentials.phone.trim();
       }
 
       const response = await fetch(url, {
@@ -99,7 +127,11 @@ export default function Login() {
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error || (mode === "login" ? "Đăng nhập thất bại" : "Đăng ký thất bại"));
+        if (response.status === 409) {
+          setError("Email đã được sử dụng.");
+        } else {
+          setError(data.error || (mode === "login" ? "Đăng nhập thất bại" : "Đăng ký thất bại"));
+        }
       } else {
         // backend may return either {token,user} or {success:true, token, user}
         if (!data || !data.token || !data.user) {
@@ -110,7 +142,7 @@ export default function Login() {
           localStorage.setItem("user", JSON.stringify(data.user));
 
           dispatch(setAuth({ user: data.user, token: data.token }));
-          navigate("/");
+          navigate("/"); // Chuyển hướng về trang chủ/dashboard sau khi đăng nhập thành công
         }
       }
 
@@ -122,16 +154,88 @@ export default function Login() {
     }
   };
 
+  const handleForgotPassword = async (event) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    const email = credentials.email.trim().toLowerCase();
+    if (!GMAIL_REGEX.test(email)) {
+      setError("Vui lòng nhập email @gmail.com hợp lệ.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Không thể tạo mã đặt lại mật khẩu.");
+        return;
+      }
+      setResetToken(data.resetToken || "");
+      setMode("reset");
+      setSuccess("Đã tạo mã đặt lại mật khẩu. Nhập mật khẩu mới để hoàn tất.");
+    } catch {
+      setError("Không thể kết nối đến server.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (event) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    if (!resetToken.trim()) {
+      setError("Thiếu mã đặt lại mật khẩu.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError("Mật khẩu mới phải có ít nhất 6 ký tự.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resetToken: resetToken.trim(), newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Không thể đặt lại mật khẩu.");
+        return;
+      }
+      setSuccess("Đã đặt lại mật khẩu thành công. Bạn có thể đăng nhập bằng mật khẩu mới.");
+      setNewPassword("");
+      setResetToken("");
+      setMode("login");
+    } catch {
+      setError("Không thể kết nối đến server.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const switchMode = (newMode) => {
     setMode(newMode);
     setError("");
+    setSuccess("");
     setCredentials(initialCredentials);
+    setNewPassword("");
+    setResetToken("");
   };
 
   const focusAuthLogin = useCallback(() => {
     closePanel();
     setMode("login");
     setError("");
+    setSuccess("");
     setCredentials(initialCredentials);
   }, [closePanel]);
 
@@ -167,7 +271,7 @@ export default function Login() {
           <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3 text-white">
               <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-lg font-semibold shadow-sm shadow-slate-950/20">
-                HotelPro
+                Mây An Nhiên
               </div>
               <nav className="flex flex-wrap gap-4 text-sm text-slate-200 sm:gap-6">
                 <button type="button" onClick={() => setActivePanel("hotel")} className="transition hover:text-white">
@@ -202,7 +306,7 @@ export default function Login() {
                   Đặt phòng khách sạn nhanh chóng, an toàn và giá tốt nhất.
                 </h1>
                 <p className="mt-4 max-w-xl text-slate-300 leading-7">
-                  Tìm nơi nghỉ phù hợp cho chuyến đi của bạn, so sánh giá và đặt ngay trong vài giây. Giao diện thân thiện, chuyên nghiệp giống Traveloka.
+                  Tìm nơi nghỉ phù hợp cho chuyến đi của bạn, so sánh giá và đặt ngay trong vài giây. Không gian thân thiện, nhẹ nhàng tại Mây An Nhiên.
                 </p>
               </div>
 
@@ -223,7 +327,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => switchMode("login")}
-                  className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${mode === "login" ? "bg-slate-800 text-white" : "text-slate-300 hover:bg-slate-800"}`}
+                  className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${mode === "login" || mode === "forgot" || mode === "reset" ? "bg-slate-800 text-white" : "text-slate-300 hover:bg-slate-800"}`}
                 >
                   Đăng nhập
                 </button>
@@ -236,7 +340,22 @@ export default function Login() {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
+              <form
+                onSubmit={mode === "forgot" ? handleForgotPassword : mode === "reset" ? handleResetPassword : handleSubmit}
+                className="space-y-5"
+                autoComplete="off"
+                noValidate
+              >
+                {mode === "forgot" && (
+                  <div className="rounded-3xl bg-sky-500/10 p-4 text-sm text-sky-100">
+                    Nhập email tài khoản để tạo mã đặt lại mật khẩu.
+                  </div>
+                )}
+                {mode === "reset" && (
+                  <div className="rounded-3xl bg-sky-500/10 p-4 text-sm text-sky-100">
+                    Demo local hiển thị mã trực tiếp. Khi triển khai thật, mã này nên được gửi qua email.
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-slate-300">Email</label>
                   <input
@@ -280,6 +399,7 @@ export default function Login() {
                   </>
                 )}
 
+                {(mode === "login" || mode === "register") && (
                 <div>
                   <label className="block text-sm font-medium text-slate-300">Mật khẩu</label>
                   <input
@@ -293,9 +413,37 @@ export default function Login() {
                     className="mt-2 w-full rounded-3xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20"
                   />
                 </div>
+                )}
+
+                {mode === "reset" && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300">Mã đặt lại</label>
+                      <textarea
+                        value={resetToken}
+                        onChange={(e) => setResetToken(e.target.value)}
+                        rows={3}
+                        className="mt-2 w-full rounded-3xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-xs text-white outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300">Mật khẩu mới</label>
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Nhập mật khẩu mới"
+                        className="mt-2 w-full rounded-3xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20"
+                      />
+                    </div>
+                  </>
+                )}
 
                 {error && (
                   <div className="rounded-3xl bg-rose-100/10 p-3 text-sm text-rose-200">{error}</div>
+                )}
+                {success && (
+                  <div className="rounded-3xl bg-emerald-100/10 p-3 text-sm text-emerald-200">{success}</div>
                 )}
 
                 <button
@@ -303,16 +451,42 @@ export default function Login() {
                   disabled={loading}
                   className="w-full rounded-3xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {loading ? (mode === "login" ? "Đang đăng nhập..." : "Đang đăng ký...") : mode === "login" ? "Đăng nhập" : "Đăng ký"}
+                  {loading
+                    ? mode === "register"
+                      ? "Đang đăng ký..."
+                      : mode === "forgot"
+                      ? "Đang tạo mã..."
+                      : mode === "reset"
+                      ? "Đang đặt lại..."
+                      : "Đang đăng nhập..."
+                    : mode === "register"
+                    ? "Đăng ký"
+                    : mode === "forgot"
+                    ? "Tạo mã đặt lại"
+                    : mode === "reset"
+                    ? "Đặt lại mật khẩu"
+                    : "Đăng nhập"}
                 </button>
               </form>
 
               <div className="mt-4 text-center text-sm text-slate-400">
                 {mode === "login" ? (
+                  <div className="space-y-2">
+                    <p>
+                      Chưa có tài khoản?{" "}
+                      <button type="button" onClick={() => switchMode("register")} className="font-semibold text-white hover:text-sky-200">
+                        Đăng ký ngay
+                      </button>
+                    </p>
+                    <button type="button" onClick={() => switchMode("forgot")} className="font-semibold text-sky-200 hover:text-white">
+                      Quên mật khẩu?
+                    </button>
+                  </div>
+                ) : mode === "forgot" || mode === "reset" ? (
                   <span>
-                    Chưa có tài khoản?{' '}
-                    <button type="button" onClick={() => switchMode("register")} className="font-semibold text-white hover:text-sky-200">
-                      Đăng ký ngay
+                    Nhớ mật khẩu?{" "}
+                    <button type="button" onClick={() => switchMode("login")} className="font-semibold text-white hover:text-sky-200">
+                      Quay lại đăng nhập
                     </button>
                   </span>
                 ) : (
@@ -369,14 +543,24 @@ export default function Login() {
                     {publicRooms.map((room) => (
                       <li
                         key={room.id}
-                        className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm"
+                        className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60 text-sm"
                       >
-                        <p className="font-semibold text-white">
-                          Phòng {room.number} · {room.type}
-                        </p>
-                        <p className="mt-1 text-slate-400">
-                          {(Number(room.price) || 0).toLocaleString("vi-VN")} ₫ / đêm · {room.status || "—"}
-                        </p>
+                        <img
+                          src={room.imageUrl || ROOM_IMAGE_FALLBACK}
+                          alt={`Phòng ${room.number}`}
+                          className="h-28 w-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = ROOM_IMAGE_FALLBACK;
+                          }}
+                        />
+                        <div className="px-4 py-3">
+                          <p className="font-semibold text-white">
+                            Phòng {room.number} · {room.type}
+                          </p>
+                          <p className="mt-1 text-slate-400">
+                            {(Number(room.price) || 0).toLocaleString("vi-VN")} ₫ / đêm · {room.status || "—"}
+                          </p>
+                        </div>
                       </li>
                     ))}
                   </ul>

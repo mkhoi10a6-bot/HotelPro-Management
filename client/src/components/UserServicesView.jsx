@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { loadData } from "../features/hotelSlice";
+import { API_URL } from "../services/config";
 
 const bankAccount = {
   bankId: "AGRIBANK",
@@ -19,10 +20,9 @@ const serviceCategories = {
   other: "Khác",
 };
 
-function buildVietQrUrl({ amount, serviceName, roomNumber }) {
-  const addInfo = encodeURIComponent(`HOTELPRO DV ${serviceName || ""} PHONG ${roomNumber || ""}`.trim());
+function buildVietQrUrl() {
   const accountName = encodeURIComponent(bankAccount.accountName);
-  return `https://img.vietqr.io/image/${bankAccount.bankId}-${bankAccount.accountNumber}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${accountName}`;
+  return `https://img.vietqr.io/image/${bankAccount.bankId}-${bankAccount.accountNumber}-compact2.png?accountName=${accountName}`;
 }
 
 export default function UserServicesView() {
@@ -75,7 +75,7 @@ export default function UserServicesView() {
   async function loadServices() {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/services", {
+      const response = await fetch(`${API_URL}/services`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -88,7 +88,7 @@ export default function UserServicesView() {
   async function loadOrders() {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/service-orders", {
+      const response = await fetch(`${API_URL}/service-orders`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -115,7 +115,7 @@ export default function UserServicesView() {
     setMessage("");
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/service-orders", {
+      const response = await fetch(`${API_URL}/service-orders`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -344,7 +344,7 @@ export default function UserServicesView() {
                 Số tiền: {orderTotal.toLocaleString("vi-VN")} ₫
               </p>
               <p className="text-slate-500">
-                Nội dung: HOTELPRO DV {selectedService.name} PHONG {selectedRoom?.number}
+                Nội dung: MAYANNHIEN DV {selectedService.name} PHONG {selectedRoom?.number}
               </p>
             </div>
             <button

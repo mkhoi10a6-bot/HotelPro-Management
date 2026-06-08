@@ -1,36 +1,37 @@
 import React, { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { loadData } from "../features/hotelSlice";
+import { API_URL } from "../services/config";
 
 const MENU_DATA = [
   {
     category: "Thức ăn (Food)",
     items: [
-      { id: "f1", name: "Bánh mì", price: 35000, desc: "Bánh mì đặc biệt đầy đủ topping", image: "https://images.unsplash.com/photo-1599487488170-d11ec9c172f0?auto=format&fit=crop&q=80&w=200" },
-      { id: "f2", name: "Phở Bò", price: 65000, desc: "Phở bò truyền thống hương vị đậm đà", image: "https://images.unsplash.com/photo-1582878826629-29b7ad1ccd63?auto=format&fit=crop&q=80&w=200" },
-      { id: "f3", name: "Bún Chả Hà Nội", price: 65000, desc: "Bún chả Hà Nội chuẩn vị, thơm ngon", image: "https://images.unsplash.com/photo-1562967914-608f82629710?auto=format&fit=crop&q=80&w=200" },
-      { id: "f4", name: "Gỏi Cuốn Tôm Thịt", price: 45000, desc: "Gỏi cuốn tươi mát (3 cuốn)", image: "https://images.unsplash.com/photo-1539136788836-5699e7863572?auto=format&fit=crop&q=80&w=200" },
-      { id: "f5", name: "Cơm Tấm Sườn Bì Chả", price: 60000, desc: "Cơm tấm sườn bì chả đặc trưng Sài Gòn", image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=200" },
-      { id: "f6", name: "Bánh Mì Chảo Đặc Biệt", price: 50000, desc: "Bánh mì chảo nóng hổi với trứng và pate", image: "https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?auto=format&fit=crop&q=80&w=200" },
+      { id: "f1", name: "Bánh mì", price: 35000, desc: "Bánh mì đặc biệt đầy đủ topping", image: "https://cdn2.fptshop.com.vn/unsafe/1920x0/filters:format(webp):quality(75)/banh_mi_ha_noi_0_26350bb14e.jpg" },
+      { id: "f2", name: "Phở Bò", price: 65000, desc: "Phở bò truyền thống hương vị đậm đà", image: "https://i-giadinh.vnecdn.net/2025/11/17/Pho-bo-Ha-Noi-7-vnexpress-1763-7388-9585-1763372391.jpg" },
+      { id: "f3", name: "Bún Chả Hà Nội", price: 65000, desc: "Bún chả Hà Nội chuẩn vị, thơm ngon", image: "https://i-giadinh.vnecdn.net/2023/04/16/Buoc-11-Thanh-pham-11-7068-1681636164.jpg" },
+      { id: "f4", name: "Gỏi Cuốn Tôm Thịt", price: 45000, desc: "Gỏi cuốn tươi mát (3 cuốn)", image: "https://i-giadinh.vnecdn.net/2025/12/09/Goi-cuon-tom-thit-7-vnexpress-2800-5342-1765272698.jpg" },
+      { id: "f5", name: "Cơm Tấm Sườn Bì Chả", price: 60000, desc: "Cơm tấm sườn bì chả đặc trưng Sài Gòn", image: "https://i-giadinh.vnecdn.net/2024/03/07/7Honthinthnhphm1-1709800144-8583-1709800424.jpg" },
+      { id: "f6", name: "Bánh Mì Chảo Đặc Biệt", price: 50000, desc: "Bánh mì chảo nóng hổi với trứng và pate", image: "https://www.huongnghiepaau.com/wp-content/uploads/2024/01/banh-mi-chao-full-topping.jpg" },
     ],
   },
   {
     category: "Đồ uống (Drinks)",
     items: [
-      { id: "d1", name: "Cafe muối", price: 40000, desc: "Cà phê muối đặc sản thơm béo", image: "https://images.unsplash.com/photo-1541167760496-162955ed8a9f?auto=format&fit=crop&q=80&w=200" },
-      { id: "d2", name: "Nước suối", price: 15000, desc: "Nước khoáng đóng chai tinh khiết", image: "https://images.unsplash.com/photo-1523362628742-0c26015ebbc6?auto=format&fit=crop&q=80&w=200" },
+      { id: "d1", name: "Cafe muối", price: 40000, desc: "Cà phê muối đặc sản thơm béo", image: "https://cubes-asia.com/storage/blogs/2024-12/cach-lam-ca-phe-muoi-nguyen-lieu-cong-thuc-lam.jpg" },
+      { id: "d2", name: "Nước suối", price: 15000, desc: "Nước khoáng đóng chai tinh khiết", image: "https://truongphatdat.com/wp-content/uploads/2019/12/Dasani-500ml.jpg" },
       { id: "d3", name: "Trà đào", price: 30000, desc: "Trà đào miếng thơm mát giải nhiệt", image: "https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&q=80&w=200" },
-      { id: "d4", name: "Trà Mãng Cầu Xiêm", price: 40000, desc: "Trà mãng cầu xiêm thanh mát (Hot trend)", image: "https://images.unsplash.com/photo-1597318181409-cf64d0b5d8a2?auto=format&fit=crop&q=80&w=200" },
-      { id: "d5", name: "Cà Phê Trứng Hà Nội", price: 50000, desc: "Cà phê trứng béo ngậy chuẩn vị Hà Nội", image: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&q=80&w=200" },
-      { id: "d6", name: "Nước Ép Trái Cây Tươi", price: 30000, desc: "Nước ép tươi theo mùa (Thơm/Dưa hấu)", image: "https://images.unsplash.com/photo-1621506289937-e8e498c0b67a?auto=format&fit=crop&q=80&w=200" },
-      { id: "d7", name: "Sinh Tố Bơ Sáp", price: 40000, desc: "Sinh tố bơ sáp thơm ngon, bổ dưỡng", image: "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&q=80&w=200" },
+      { id: "d4", name: "Trà Mãng Cầu Xiêm", price: 40000, desc: "Trà mãng cầu xiêm thanh mát (Hot trend)", image: "https://blog.aeoneshop.com/wp-content/uploads/2025/11/cach-lam-tra-mang-cau-thumbnail.jpeg" },
+      { id: "d5", name: "Cà Phê Trứng Hà Nội", price: 50000, desc: "Cà phê trứng béo ngậy chuẩn vị Hà Nội", image: "https://cooponline.vn/tin-tuc/wp-content/uploads/2025/10/cach-lam-ca-phe-trung-nong-dam-da-beo-min-chuan-huong-viet-3.png" },
+      { id: "d6", name: "Nước Ép Trái Cây Tươi", price: 30000, desc: "Nước ép tươi theo mùa (Thơm/Dưa hấu)", image: "https://bizweb.dktcdn.net/100/405/121/products/pineapple-watermelon-juice-jpeg.jpg?v=1634158438353" },
+      { id: "d7", name: "Sinh Tố Bơ Sáp", price: 40000, desc: "Sinh tố bơ sáp thơm ngon, bổ dưỡng", image: "https://beptruong.edu.vn/wp-content/uploads/2021/03/sinh-to-bo-sau-rieng.jpg" },
     ],
   },
   {
     category: "Dịch vụ khác (Other Services)",
     items: [
       { id: "o1", name: "Giặt ủi (Laundry)", price: 50000, desc: "Dịch vụ giặt sấy trong ngày", image: "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&q=80&w=200" },
-      { id: "o2", name: "Thuê xe máy (Motorbike rental)", price: 150000, desc: "Xe máy đời mới, đầy đủ xăng", image: "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&q=80&w=200" },
+      { id: "o2", name: "Thuê xe máy (Motorbike rental)", price: 150000, desc: "Xe máy đời mới, đầy đủ xăng", image: "https://motogo.vn/wp-content/uploads/2020/07/motogo-thue-xe-may-ha-giang-5.jpg" },
     ],
   },
 ];
@@ -45,7 +46,7 @@ function AdminServiceView() {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch("/api/service-orders", {
+      const res = await fetch(`${API_URL}/service-orders`, {
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
       const data = await res.json();
@@ -59,7 +60,7 @@ function AdminServiceView() {
 
   const markAsServed = async (id) => {
     try {
-      const res = await fetch(`/api/service-orders/${id}`, {
+      const res = await fetch(`${API_URL}/service-orders/${id}`, {
         method: "PATCH",
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
@@ -211,7 +212,7 @@ function CustomerServiceView() {
 
     try {
       const postOrder = async (retries = 3) => {
-        const response = await fetch("/api/service-orders", {
+        const response = await fetch(`${API_URL}/service-orders`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -371,10 +372,9 @@ function CustomerServiceView() {
             
             <div className="bg-slate-50 p-6 rounded-[32px] border-2 border-slate-100 mb-8 inline-block">
               <img 
-                src="/image_cf3bf8.jpg" 
+                src="https://img.vietqr.io/image/AGRIBANK-1805205139140-compact2.png?accountName=PHAM%20MINH%20KHOI" 
                 alt="QR Payment" 
                 className="w-48 h-48 object-cover rounded-xl"
-                onError={(e) => (e.target.src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=HotelService")}
               />
             </div>
 

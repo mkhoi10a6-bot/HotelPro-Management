@@ -1,4 +1,4 @@
-const API_BASE = "/api";
+import { API_URL } from "./config";
 
 async function request(path, options = {}) {
   const token = localStorage.getItem('token');
@@ -8,7 +8,7 @@ async function request(path, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${API_URL}${path}`, {
     headers,
     ...options,
   });

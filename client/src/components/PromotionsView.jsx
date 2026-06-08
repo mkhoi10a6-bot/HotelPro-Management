@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_URL } from "../services/config";
 
 const emptyForm = {
   title: "",
@@ -20,7 +21,7 @@ export default function PromotionsView() {
 
   const load = async () => {
     try {
-      const res = await fetch("/api/promotions", {
+      const res = await fetch(`${API_URL}/promotions`, {
         headers: { Authorization: `Bearer ${token()}` },
       });
       const data = await res.json();
@@ -71,8 +72,8 @@ export default function PromotionsView() {
         sort_order: Number(form.sort_order) || 0,
       };
       const url = editingId
-        ? `/api/promotions/${editingId}`
-        : "/api/promotions";
+        ? `${API_URL}/promotions/${editingId}`
+        : `${API_URL}/promotions`;
       const res = await fetch(url, {
         method: editingId ? "PUT" : "POST",
         headers: {
@@ -101,7 +102,7 @@ export default function PromotionsView() {
   const handleDelete = async (id) => {
     if (!window.confirm("Xóa ưu đãi này?")) return;
     try {
-      const res = await fetch(`/api/promotions/${id}`, {
+      const res = await fetch(`${API_URL}/promotions/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token()}` },
       });
