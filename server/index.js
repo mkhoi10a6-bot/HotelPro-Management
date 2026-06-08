@@ -226,15 +226,27 @@ async function listBookings({ isAdmin, userId, status, dateFrom, dateTo } = {}) 
 const allowedOrigins = new Set([
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'https://may-an-nhien.onrender.com',
   ...String(process.env.CLIENT_ORIGIN || "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
 ]);
 
+function isAllowedOrigin(origin) {
+  if (!origin || allowedOrigins.has(origin)) return true;
+
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "https:" && parsed.hostname.endsWith(".onrender.com");
+  } catch {
+    return false;
+  }
+}
+
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.has(origin)) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
       return;
     }
