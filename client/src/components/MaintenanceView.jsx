@@ -35,7 +35,7 @@ export default function MaintenanceView() {
   const loadRequests = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/maintenance", {
+      const response = await fetch("/api/maintenance", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -55,7 +55,7 @@ export default function MaintenanceView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/maintenance", {
+      const response = await fetch("/api/maintenance", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -89,7 +89,7 @@ export default function MaintenanceView() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:4000/api/maintenance/${id}`, {
+      const response = await fetch(`/api/maintenance/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

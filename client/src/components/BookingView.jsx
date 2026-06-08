@@ -123,7 +123,7 @@ export default function BookingView() {
       let bookingCustomerId = validation.customerId;
 
       if (user?.role === "customer" && !bookingCustomerId) {
-        const customerResponse = await fetch("http://localhost:4000/api/customers", {
+        const customerResponse = await fetch("/api/customers", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -144,7 +144,7 @@ export default function BookingView() {
         bookingCustomerId = customerData.id;
       }
 
-      const response = await fetch("http://localhost:4000/api/bookings", {
+      const response = await fetch("/api/bookings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

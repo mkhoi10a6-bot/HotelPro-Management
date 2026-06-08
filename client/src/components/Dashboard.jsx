@@ -13,7 +13,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch(`http://localhost:4000/api/admin/stats?range=${range}`, {
+        const res = await fetch(`/api/admin/stats?range=${range}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();

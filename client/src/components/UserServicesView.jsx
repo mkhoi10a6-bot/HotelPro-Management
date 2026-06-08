@@ -75,7 +75,7 @@ export default function UserServicesView() {
   async function loadServices() {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/services", {
+      const response = await fetch("/api/services", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -88,7 +88,7 @@ export default function UserServicesView() {
   async function loadOrders() {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/service-orders", {
+      const response = await fetch("/api/service-orders", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -115,7 +115,7 @@ export default function UserServicesView() {
     setMessage("");
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/service-orders", {
+      const response = await fetch("/api/service-orders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

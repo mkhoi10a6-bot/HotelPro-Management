@@ -20,7 +20,7 @@ export default function PromotionsView() {
 
   const load = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/promotions", {
+      const res = await fetch("/api/promotions", {
         headers: { Authorization: `Bearer ${token()}` },
       });
       const data = await res.json();
@@ -71,8 +71,8 @@ export default function PromotionsView() {
         sort_order: Number(form.sort_order) || 0,
       };
       const url = editingId
-        ? `http://localhost:5000/api/promotions/${editingId}`
-        : "http://localhost:5000/api/promotions";
+        ? `/api/promotions/${editingId}`
+        : "/api/promotions";
       const res = await fetch(url, {
         method: editingId ? "PUT" : "POST",
         headers: {
@@ -101,7 +101,7 @@ export default function PromotionsView() {
   const handleDelete = async (id) => {
     if (!window.confirm("Xóa ưu đãi này?")) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/promotions/${id}`, {
+      const res = await fetch(`/api/promotions/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token()}` },
       });

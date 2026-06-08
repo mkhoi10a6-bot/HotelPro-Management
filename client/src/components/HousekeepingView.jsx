@@ -30,7 +30,7 @@ export default function HousekeepingView() {
   const loadSchedule = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/housekeeping", {
+      const response = await fetch("/api/housekeeping", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -52,8 +52,8 @@ export default function HousekeepingView() {
       const token = localStorage.getItem("token");
       const method = selectedRoom ? "PUT" : "POST";
       const url = selectedRoom
-        ? `http://localhost:4000/api/housekeeping/${selectedRoom.id}`
-        : "http://localhost:4000/api/housekeeping";
+        ? `/api/housekeeping/${selectedRoom.id}`
+        : "/api/housekeeping";
 
       const response = await fetch(url, {
         method,
@@ -96,7 +96,7 @@ export default function HousekeepingView() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:4000/api/housekeeping/${id}`, {
+      const response = await fetch(`/api/housekeeping/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

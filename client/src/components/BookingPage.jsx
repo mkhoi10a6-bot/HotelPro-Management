@@ -146,7 +146,7 @@ export default function BookingPage() {
       // Simulated 2-second delay for transaction processing as requested
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const res = await fetch("http://localhost:5000/api/bookings", {
+      const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",

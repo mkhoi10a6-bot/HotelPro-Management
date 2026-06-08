@@ -12,7 +12,7 @@ export default function RoomsView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      await fetch(`http://localhost:4000/api/rooms/${roomId}`, {
+      await fetch(`/api/rooms/${roomId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

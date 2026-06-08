@@ -16,7 +16,7 @@ export default function PaymentView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:4000/api/invoices/${invoiceId}`, {
+      const response = await fetch(`/api/invoices/${invoiceId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

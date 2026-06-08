@@ -21,7 +21,7 @@ export default function InventoryView() {
   const loadItems = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/inventory", {
+      const response = await fetch("/api/inventory", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -41,7 +41,7 @@ export default function InventoryView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/inventory", {
+      const response = await fetch("/api/inventory", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -76,7 +76,7 @@ export default function InventoryView() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:4000/api/inventory/${id}`, {
+      const response = await fetch(`/api/inventory/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

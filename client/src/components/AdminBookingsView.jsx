@@ -9,7 +9,7 @@ export default function AdminBookingsView() {
   useEffect(() => {
     const fetchBookings = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/admin/bookings", {
+        const res = await fetch("/api/admin/bookings", {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
@@ -25,7 +25,7 @@ export default function AdminBookingsView() {
 
   const updateBookingStatus = async (id, status) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/admin/bookings/${id}`, {
+      const res = await fetch(`/api/admin/bookings/${id}`, {
         method: "PATCH",
         headers: { 
           "Content-Type": "application/json",

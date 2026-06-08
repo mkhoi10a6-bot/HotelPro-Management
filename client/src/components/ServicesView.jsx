@@ -45,7 +45,7 @@ function AdminServiceView() {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch("http://localhost:4000/api/service-orders", {
+      const res = await fetch("/api/service-orders", {
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
       const data = await res.json();
@@ -59,7 +59,7 @@ function AdminServiceView() {
 
   const markAsServed = async (id) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/service-orders/${id}`, {
+      const res = await fetch(`/api/service-orders/${id}`, {
         method: "PATCH",
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
@@ -211,7 +211,7 @@ function CustomerServiceView() {
 
     try {
       const postOrder = async (retries = 3) => {
-        const response = await fetch("http://localhost:4000/api/service-orders", {
+        const response = await fetch("/api/service-orders", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",

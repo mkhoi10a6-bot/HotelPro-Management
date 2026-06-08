@@ -5,7 +5,7 @@ import { setAuth } from "../features/hotelSlice";
 
 const initialCredentials = { email: "", password: "", name: "", phone: "" };
 
-const PUBLIC_API = "http://localhost:5000/api/public";
+const PUBLIC_API = "/api/public";
 
 export default function Login() {
   const dispatch = useDispatch();
@@ -82,7 +82,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const url = mode === "login" ? "http://localhost:5000/api/login" : `http://localhost:5000/api/auth/${mode}`;
+      const url = mode === "login" ? "/api/login" : `/api/auth/${mode}`;
       const payload = {
         email: credentials.email,
         password: credentials.password,

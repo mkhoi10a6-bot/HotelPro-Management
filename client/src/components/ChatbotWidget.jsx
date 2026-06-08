@@ -54,7 +54,7 @@ export default function ChatbotWidget() {
   }, [messages, open]);
 
   async function callBackendRespond(payload) {
-    const res = await fetch("http://localhost:4000/api/chatbot/respond", {
+    const res = await fetch("/api/chatbot/respond", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

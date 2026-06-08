@@ -9,7 +9,7 @@ export default function ContactMessagesView() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("http://localhost:4000/api/admin/contact-messages", {
+      const res = await fetch("/api/admin/contact-messages", {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const data = await res.json();

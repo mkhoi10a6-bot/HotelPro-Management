@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
+const path = require("path");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const db = require("./db");
@@ -68,6 +69,9 @@ app.use(cors({
 })); 
 app.use(express.json()); 
 app.use(morgan("dev"));
+
+const clientDistPath = path.resolve(__dirname, "../client/dist");
+app.use(express.static(clientDistPath));
 
 function sendError(res, error) {
   console.error(error);
@@ -553,6 +557,10 @@ app.get("/api/invoices", authenticateToken, (req, res) => {
 });
 
 app.get("/health", (req, res) => res.send("ok"));
+
+app.get(/^\/(?!api\/).*/, (req, res) => {
+  res.sendFile(path.join(clientDistPath, "index.html"));
+});
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`Backend started at http://localhost:${port}`);

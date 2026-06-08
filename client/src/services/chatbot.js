@@ -1,4 +1,4 @@
-const CHATBOT_BASE = "http://localhost:4000/api";
+const CHATBOT_BASE = "/api";
 
 export async function chatbotRespond(payload) {
   const res = await fetch(`${CHATBOT_BASE}/chatbot/respond`, {

@@ -28,7 +28,7 @@ export default function EmployeeView() {
   const loadEmployees = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/employees", {
+      const response = await fetch("/api/employees", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -48,7 +48,7 @@ export default function EmployeeView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/employees", {
+      const response = await fetch("/api/employees", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -87,7 +87,7 @@ export default function EmployeeView() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:4000/api/employees/${id}`, {
+      const response = await fetch(`/api/employees/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
