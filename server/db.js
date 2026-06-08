@@ -3,7 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-const dbPath = path.join(__dirname, 'hotel.db');
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'hotel.db');
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const ADMIN_EMAIL = 'mkhoi10a6@gmail.com';
 const ADMIN_PASSWORD = '0938190949';
 const ADMIN_NAME = 'Admin Hotel';
@@ -104,6 +105,21 @@ const db = new sqlite3.Database(dbPath, (err) => {
           console.log("Added missing 'updated_at' column to service_usage table.");
         }
 
+        // Migrations cho bảng bookings
+        const bookingColumns = await dbAllP("PRAGMA table_info(bookings)");
+        const bookingColumnNames = bookingColumns.map(c => c.name);
+        if (!bookingColumnNames.includes('total_amount')) {
+          await dbRunP("ALTER TABLE bookings ADD COLUMN total_amount REAL DEFAULT 0");
+          console.log("Added missing 'total_amount' column to bookings table.");
+        }
+
+        const roomColumns = await dbAllP("PRAGMA table_info(rooms)");
+        const roomColumnNames = roomColumns.map(c => c.name);
+        if (!roomColumnNames.includes('image_url')) {
+          await dbRunP("ALTER TABLE rooms ADD COLUMN image_url TEXT");
+          console.log("Added missing 'image_url' column to rooms table.");
+        }
+
         // Step 3: Seed database with sample data
         await seedDatabase();
 
@@ -116,10 +132,10 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 // Seed database with sample data (now an async function)
 async function seedDatabase() {
-  // Check if data already exists
+  // 2. Kiểm tra xem đã có User chưa, nếu chưa mới seed dữ liệu mẫu khác
   const row = await dbGetP("SELECT COUNT(*) as count FROM users");
-
     if (row.count === 0) {
+      console.log('Đang khởi tạo dữ liệu mẫu lần đầu...');
       // Seed users
       const users = [
         [ADMIN_EMAIL, bcrypt.hashSync(ADMIN_PASSWORD, 10), 'admin', ADMIN_NAME, '0938190949'],
@@ -132,13 +148,20 @@ async function seedDatabase() {
 
     // Seed rooms
     const rooms = [
-      ['101', 'Standard', 950000, 'available'],
-      ['102', 'Deluxe', 1450000, 'available'],
-      ['103', 'Suite', 2400000, 'available']
+      ['101', 'Standard', 550000, 'available', 1],
+      ['102', 'Standard', 550000, 'available', 1],
+      ['103', 'Standard', 550000, 'available', 1],
+      ['104', 'Standard', 550000, 'available', 1],
+      ['105', 'Standard', 550000, 'available', 1],
+      ['201', 'VIP', 950000, 'available', 2],
+      ['202', 'VIP', 950000, 'available', 2],
+      ['203', 'VIP', 950000, 'available', 2],
+      ['301', 'Suite', 1800000, 'available', 2],
+      ['302', 'Suite', 1800000, 'available', 2],
     ];
 
     for (const room of rooms) {
-      await dbRunP("INSERT INTO rooms (number, type, price, status) VALUES (?, ?, ?, ?)", room);
+      await dbRunP("INSERT INTO rooms (number, type, price, status, capacity) VALUES (?, ?, ?, ?, ?)", room);
     }
 
     // Seed customers
@@ -178,7 +201,7 @@ async function seedDatabase() {
       const promoRows = [
         ['Đặt sớm — giảm 15%', 'Đặt trước ngày nhận phòng ít nhất 14 ngày. Áp dụng phòng Standard & Deluxe trong khung giờ khuyến mãi.', 'SOM14', 1, 1],
         ['Ở 3 đêm — tặng bữa sáng', 'Gói lưu trú từ 3 đêm trở lên: buffet sáng cho 2 người/phòng (theo điều kiện khách sạn).', 'BF3N', 1, 2],
-        ['Thành viên mới', 'Đăng ký tài khoản HotelPro và đặt phòng lần đầu: nhận voucher giảm 10% cho lần đặt tiếp theo.', 'WEL10', 1, 3],
+        ['Thành viên mới', 'Đăng ký tài khoản Mây An Nhiên và đặt phòng lần đầu: nhận voucher giảm 10% cho lần đặt tiếp theo.', 'WEL10', 1, 3],
       ];
     for (const r of promoRows) {
       await dbRunP(
@@ -278,7 +301,20 @@ function remove(collection, id, callback) {
 
 // Lấy danh sách khách hàng
 function getCustomers(callback) {
-  db.all("SELECT * FROM customers ORDER BY name", [], callback);
+  db.all(
+    `SELECT
+      id,
+      name,
+      email,
+      COALESCE(phone, '') AS phone,
+      COALESCE(status, 'active') AS status,
+      created_at
+    FROM users
+    WHERE role = 'customer'
+    ORDER BY datetime(created_at) DESC, id DESC`,
+    [],
+    callback
+  );
 }
 
 // User-specific functions
@@ -307,7 +343,9 @@ function createUser(userData, callback) {
         email: user.email,
         role: user.role,
         name: user.name,
-        phone: user.phone || ''
+        phone: user.phone || '',
+        status: user.status || 'active',
+        created_at: user.created_at || data.created_at
       });
     } else {
       callback(new Error("Không thể lấy thông tin người dùng vừa tạo"));
@@ -322,7 +360,7 @@ function validatePassword(plainPassword, hashedPassword) {
 /** Room list for public landing (no token). */
 function getPublicRoomsPreview(callback) {
   db.all(
-    "SELECT id, number, type, price, status FROM rooms ORDER BY number COLLATE NOCASE LIMIT 40",
+    "SELECT id, number, type, price, status, image_url AS imageUrl FROM rooms ORDER BY number COLLATE NOCASE LIMIT 40",
     [],
     callback
   );
@@ -420,4 +458,7 @@ module.exports = {
   getAllContactMessages,
   saveContactMessage,
   getCustomers,
+  dbRunP,
+  dbGetP,
+  dbAllP
 };
