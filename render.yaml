@@ -6,15 +6,9 @@ services:
     buildCommand: npm run render-build
     startCommand: npm start
     healthCheckPath: /health
-    disk:
-      name: may-an-nhien-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DB_PATH
-        value: /var/data/hotel.db
       - key: REQUIRE_HTTPS
         value: "true"
       - key: JWT_SECRET
