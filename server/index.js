@@ -26,6 +26,44 @@ if (isProduction && JWT_SECRET === "your-secret-key-here") {
   console.warn("WARNING: JWT_SECRET is using the default value in production. Set a strong secret before deploying.");
 }
 
+function createRateLimiter({ windowMs, max, message }) {
+  const hits = new Map();
+
+  return (req, res, next) => {
+    const forwardedFor = String(req.headers["x-forwarded-for"] || "");
+    const ip = forwardedFor.split(",")[0].trim() || req.ip || req.socket.remoteAddress || "unknown";
+    const key = `${ip}:${req.path}`;
+    const now = Date.now();
+    const current = hits.get(key) || { count: 0, resetAt: now + windowMs };
+
+    if (current.resetAt <= now) {
+      current.count = 0;
+      current.resetAt = now + windowMs;
+    }
+
+    current.count += 1;
+    hits.set(key, current);
+
+    if (current.count > max) {
+      return res.status(429).json({ error: message || "Bạn thao tác quá nhanh. Vui lòng thử lại sau." });
+    }
+
+    next();
+  };
+}
+
+const authLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: "Bạn thử quá nhiều lần. Vui lòng chờ ít phút rồi thử lại.",
+});
+
+const publicWriteLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  message: "Bạn gửi quá nhiều yêu cầu. Vui lòng thử lại sau.",
+});
+
 let genAI = null;
 try {
   const apiKey = process.env.GOOGLE_API_KEY;
@@ -265,8 +303,11 @@ app.use((req, res, next) => {
   }
   next();
 });
+app.disable("x-powered-by");
 app.use(express.json()); 
 app.use(morgan("dev"));
+app.use(["/api/login", "/api/auth/login", "/api/auth/register", "/api/auth/forgot-password", "/api/auth/reset-password"], authLimiter);
+app.use(["/api/public/contact"], publicWriteLimiter);
 
 const clientDistPath = path.resolve(__dirname, "../client/dist");
 if (fs.existsSync(clientDistPath)) {

@@ -7,7 +7,7 @@ const dbPath = process.env.DB_PATH || path.join(__dirname, 'hotel.db');
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const ADMIN_EMAIL = 'mkhoi10a6@gmail.com';
 const ADMIN_PASSWORD = '0938190949';
-const ADMIN_NAME = 'Admin Hotel';
+const ADMIN_NAME = 'M. Khoi Admin';
 
 // Promisify db.exec, db.all, db.get, db.run for easier async/await usage
 function dbExecP(sql) {
@@ -139,7 +139,7 @@ async function seedDatabase() {
       // Seed users
       const users = [
         [ADMIN_EMAIL, bcrypt.hashSync(ADMIN_PASSWORD, 10), 'admin', ADMIN_NAME, '0938190949'],
-        ['customer@hotel.com', bcrypt.hashSync('password', 10), 'customer', 'Customer User', '0987654321']
+        ['khachhang@hotel.com', bcrypt.hashSync('password', 10), 'customer', 'Khách hàng mẫu', '0987654321']
       ];
 
     for (const user of users) {
@@ -166,8 +166,8 @@ async function seedDatabase() {
 
     // Seed customers
     const customers = [
-      ['Nguyen Van A', '0901234567', 'a@example.com'],
-      ['Tran Thi B', '0912345678', 'b@example.com']
+      ['Nguyễn Văn An', '0901234567', 'an.nguyen@gmail.com'],
+      ['Trần Thị Bình', '0912345678', 'binh.tran@gmail.com']
     ];
 
     for (const customer of customers) {
@@ -176,6 +176,8 @@ async function seedDatabase() {
 
     console.log('Sample data seeded.');
   }
+
+  await cleanupDemoUsers();
 
   // Ensure the fixed admin account still exists and is synced
   const adminRow = await dbGetP("SELECT * FROM users WHERE email = ?", [ADMIN_EMAIL]);
@@ -235,6 +237,30 @@ async function seedDatabase() {
         );
     }
     console.log('Default services for landing seeded.');
+  }
+}
+
+async function cleanupDemoUsers() {
+  const demoEmailsToDelete = [
+    'customer@hotel.com',
+    'phone.test@example.com',
+    'test@example.com',
+  ];
+
+  for (const email of demoEmailsToDelete) {
+    await dbRunP("DELETE FROM users WHERE email = ? AND role = 'customer'", [email]);
+  }
+
+  const friendlyNames = [
+    ['Trần Thị Hồng Hạnh', 'honghanh354@gmail.com'],
+    ['Khách hàng Mây An Nhiên', 'khachhang@hotel.com'],
+  ];
+
+  for (const [name, email] of friendlyNames) {
+    await dbRunP(
+      "UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE email = ? AND role = 'customer'",
+      [name, email]
+    );
   }
 }
 

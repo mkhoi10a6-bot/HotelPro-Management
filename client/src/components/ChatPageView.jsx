@@ -113,7 +113,11 @@ export default function ChatPageView() {
                 alt={msg.isUser ? "User" : "AI"}
                 className="w-10 h-10 rounded-full shadow-sm bg-white object-cover border border-slate-100"
               />
-              {msg.isUser && <p className="text-[10px] text-slate-400 text-center mt-1">hanhhanh</p>}
+              {msg.isUser && (
+                <p className="text-[10px] text-slate-400 text-center mt-1">
+                  {user?.name || "Bạn"}
+                </p>
+              )}
             </div>
             <div className={`max-w-[85%] md:max-w-[70%] p-5 rounded-3xl text-sm leading-relaxed ${
               msg.isUser 

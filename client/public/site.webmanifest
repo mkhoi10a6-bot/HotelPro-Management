@@ -1,0 +1,10 @@
+{
+  "name": "Mây An Nhiên",
+  "short_name": "Mây An Nhiên",
+  "description": "Hệ thống đặt phòng và quản lý khách sạn Mây An Nhiên.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#0284c7",
+  "lang": "vi-VN"
+}
