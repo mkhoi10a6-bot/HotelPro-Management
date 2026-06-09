@@ -8,6 +8,18 @@ fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const ADMIN_EMAIL = 'mkhoi10a6@gmail.com';
 const ADMIN_PASSWORD = '0938190949';
 const ADMIN_NAME = 'M. Khoi Admin';
+const DEFAULT_ROOMS = [
+  ['101', 'Standard', 550000, 'available', 1],
+  ['102', 'Standard', 550000, 'available', 1],
+  ['103', 'Standard', 550000, 'available', 1],
+  ['104', 'Standard', 550000, 'available', 1],
+  ['105', 'Standard', 550000, 'available', 1],
+  ['201', 'VIP', 950000, 'available', 2],
+  ['202', 'VIP', 950000, 'available', 2],
+  ['203', 'VIP', 950000, 'available', 2],
+  ['301', 'Suite', 1800000, 'available', 2],
+  ['302', 'Suite', 1800000, 'available', 2],
+];
 
 // Promisify db.exec, db.all, db.get, db.run for easier async/await usage
 function dbExecP(sql) {
@@ -146,23 +158,7 @@ async function seedDatabase() {
       await dbRunP("INSERT INTO users (email, password, role, name, phone) VALUES (?, ?, ?, ?, ?)", user);
     }
 
-    // Seed rooms
-    const rooms = [
-      ['101', 'Standard', 550000, 'available', 1],
-      ['102', 'Standard', 550000, 'available', 1],
-      ['103', 'Standard', 550000, 'available', 1],
-      ['104', 'Standard', 550000, 'available', 1],
-      ['105', 'Standard', 550000, 'available', 1],
-      ['201', 'VIP', 950000, 'available', 2],
-      ['202', 'VIP', 950000, 'available', 2],
-      ['203', 'VIP', 950000, 'available', 2],
-      ['301', 'Suite', 1800000, 'available', 2],
-      ['302', 'Suite', 1800000, 'available', 2],
-    ];
-
-    for (const room of rooms) {
-      await dbRunP("INSERT INTO rooms (number, type, price, status, capacity) VALUES (?, ?, ?, ?, ?)", room);
-    }
+    await ensureDefaultRooms();
 
     // Seed customers
     const customers = [
@@ -178,6 +174,7 @@ async function seedDatabase() {
   }
 
   await cleanupDemoUsers();
+  await ensureDefaultRooms();
 
   // Ensure the fixed admin account still exists and is synced
   const adminRow = await dbGetP("SELECT * FROM users WHERE email = ?", [ADMIN_EMAIL]);
@@ -237,6 +234,22 @@ async function seedDatabase() {
         );
     }
     console.log('Default services for landing seeded.');
+  }
+}
+
+async function ensureDefaultRooms() {
+  let insertedCount = 0;
+
+  for (const room of DEFAULT_ROOMS) {
+    const result = await dbRunP(
+      "INSERT OR IGNORE INTO rooms (number, type, price, status, capacity) VALUES (?, ?, ?, ?, ?)",
+      room
+    );
+    insertedCount += result.changes || 0;
+  }
+
+  if (insertedCount > 0) {
+    console.log(`Default room sync added ${insertedCount} missing room(s).`);
   }
 }
 
