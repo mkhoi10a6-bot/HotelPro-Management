@@ -418,7 +418,44 @@ function normalizeStatus(status) {
   return String(status || "pending").trim().toLowerCase();
 }
 
+function calculateNights(checkIn, checkOut) {
+  const start = new Date(checkIn);
+  const end = new Date(checkOut);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return 0;
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.max(1, Math.ceil((end - start) / millisecondsPerDay));
+}
+
+function resolveBookingAmount({ totalAmount, total_amount, roomPrice, checkIn, checkOut, check_in, check_out }) {
+  const storedAmount = Number(totalAmount ?? total_amount);
+  if (Number.isFinite(storedAmount) && storedAmount > 0) return storedAmount;
+
+  const price = Number(roomPrice);
+  const nights = calculateNights(checkIn ?? check_in, checkOut ?? check_out);
+  return Number.isFinite(price) && price > 0 && nights > 0 ? price * nights : 0;
+}
+
+async function getRoomPriceForBooking(roomId) {
+  const room = await db.dbGetP(
+    `SELECT price
+     FROM rooms
+     WHERE CAST(number AS TEXT) = CAST(? AS TEXT)
+        OR CAST(id AS TEXT) = CAST(? AS TEXT)
+     LIMIT 1`,
+    [String(roomId), String(roomId)]
+  );
+  return Number(room?.price) || 0;
+}
+
 function normalizeBookingRow(row) {
+  const totalAmount = resolveBookingAmount({
+    total_amount: row.total_amount,
+    totalAmount: row.totalAmount,
+    roomPrice: row.roomPrice || row.room_price,
+    checkIn: row.check_in,
+    checkOut: row.check_out,
+  });
+
   return {
     ...row,
     roomId: row.room_id,
@@ -427,7 +464,8 @@ function normalizeBookingRow(row) {
     customerName: row.customerName || row.customer_name || "Khách hàng",
     checkIn: row.check_in,
     checkOut: row.check_out,
-    totalAmount: Number(row.total_amount || row.totalAmount || 0),
+    roomPrice: Number(row.roomPrice || row.room_price || 0),
+    totalAmount,
     status: normalizeStatus(row.status),
     createdAt: row.created_at,
   };
@@ -452,9 +490,10 @@ async function syncRoomStatusFromBookings(roomNumber) {
 
 async function getBookingById(id) {
   const row = await db.dbGetP(
-    `SELECT b.*, r.number AS roomNumber, u.name AS customerName, u.phone, u.email
+    `SELECT b.*, r.number AS roomNumber, r.price AS roomPrice, r.type AS roomType, u.name AS customerName, u.phone, u.email
      FROM bookings b
      LEFT JOIN rooms r ON CAST(r.number AS TEXT) = CAST(b.room_id AS TEXT)
+       OR CAST(r.id AS TEXT) = CAST(b.room_id AS TEXT)
      LEFT JOIN users u ON u.id = b.customer_id
      WHERE b.id = ?`,
     [id]
@@ -488,9 +527,10 @@ async function listBookings({ isAdmin, userId, status, dateFrom, dateTo } = {}) 
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const rows = await db.dbAllP(
-    `SELECT b.*, r.number AS roomNumber, u.name AS customerName, u.phone, u.email
+    `SELECT b.*, r.number AS roomNumber, r.price AS roomPrice, r.type AS roomType, u.name AS customerName, u.phone, u.email
      FROM bookings b
      LEFT JOIN rooms r ON CAST(r.number AS TEXT) = CAST(b.room_id AS TEXT)
+       OR CAST(r.id AS TEXT) = CAST(b.room_id AS TEXT)
      LEFT JOIN users u ON u.id = b.customer_id
      ${whereSql}
      ORDER BY date(b.check_in) DESC, b.id DESC`,
@@ -1051,15 +1091,20 @@ app.patch("/api/service-orders/:id", authenticateToken, (req, res) => {
 // GET hạng phòng: Standard, VIP, Suite
 app.get("/api/rooms", authenticateToken, async (req, res) => {
   let sourceRooms = rooms;
+  let bookingRows = bookings;
   try {
     sourceRooms = await loadRoomsFromDatabase();
+    bookingRows = await listBookings({ isAdmin: true });
   } catch (err) {
-    console.error("Load rooms from database failed:", err.message);
+    console.error("Load rooms/bookings from database failed:", err.message);
   }
 
   const roomsWithRevenue = sourceRooms.map(room => {
-    const roomRevenue = bookings
-      .filter(b => Number(b.roomId) === Number(room.id) && b.status !== "Cancelled")
+    const roomRevenue = bookingRows
+      .filter(b =>
+        String(b.roomId) === String(room.number) &&
+        normalizeStatus(b.status) !== "cancelled"
+      )
       .reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
 
     return { ...room, revenue: roomRevenue };
@@ -1195,7 +1240,8 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
     if (!finalRoomId || !checkIn || !checkOut) return res.status(400).json({ error: "Thiếu thông tin phòng hoặc ngày tháng" });
     if (new Date(checkOut) <= new Date(checkIn)) return res.status(400).json({ error: "Ngày trả phải sau ngày nhận." });
 
-    const amount = Number(totalAmount || 0);
+    const roomPrice = await getRoomPriceForBooking(finalRoomId);
+    const amount = resolveBookingAmount({ totalAmount, roomPrice, checkIn, checkOut });
     const bookingCustomerId = customer_id || req.user.id;
 
     await db.dbRunP("BEGIN IMMEDIATE");
@@ -1362,59 +1408,69 @@ app.get("/api/customers", authenticateToken, (req, res) => {
 });
 
 // Admin endpoint to fetch system statistics (revenue)
-app.get("/api/admin/stats", authenticateToken, (req, res) => {
+app.get("/api/admin/stats", authenticateToken, async (req, res) => {
   if (req.user.role !== "admin") return res.status(403).json({ error: "Forbidden" });
 
-  const range = parseInt(req.query.range) || 7;
-  const startDate = new Date();
-  startDate.setHours(0, 0, 0, 0);
-  startDate.setDate(startDate.getDate() - range);
+  try {
+    const range = parseInt(req.query.range) || 7;
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    startDate.setDate(startDate.getDate() - range + 1);
 
-  let filteredRevenue = 0;
-  let filteredBookingCount = 0;
-  const dailyData = {};
+    let filteredRevenue = 0;
+    let filteredBookingCount = 0;
+    const dailyData = {};
 
-  // Khởi tạo các ngày trong khoảng range để biểu đồ không bị trống
-  for (let i = 0; i < range; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    dailyData[d.toISOString().split('T')[0]] = 0;
-  }
+    // Khởi tạo các ngày trong khoảng range để biểu đồ không bị trống
+    for (let i = range - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      dailyData[d.toISOString().split("T")[0]] = 0;
+    }
 
-  // Lọc doanh thu từ bookings
-  bookings.forEach(b => {
-    if (!b || !b.createdAt) return;
-    const bDate = new Date(b.createdAt);
-    if (b.status !== "Cancelled" && !isNaN(bDate.getTime()) && bDate >= startDate) {
-      const dateStr = bDate.toISOString().split('T')[0];
+    const [bookingRows, latestRooms] = await Promise.all([
+      listBookings({ isAdmin: true }),
+      loadRoomsFromDatabase().catch(() => rooms),
+    ]);
+
+    // Lọc doanh thu từ bookings đã lưu trong database, không dùng biến RAM sau deploy
+    bookingRows.forEach((b) => {
+      const rawDate = b.createdAt || b.checkIn;
+      const bDate = new Date(rawDate);
+      if (!rawDate || Number.isNaN(bDate.getTime()) || bDate < startDate) return;
+      if (normalizeStatus(b.status) === "cancelled") return;
+
+      const dateStr = bDate.toISOString().split("T")[0];
       const amount = Number(b.totalAmount) || 0;
       if (dailyData[dateStr] !== undefined) dailyData[dateStr] += amount;
       filteredRevenue += amount;
-      filteredBookingCount++;
-    }
-  });
+      filteredBookingCount += 1;
+    });
 
-  // Lọc doanh thu từ dịch vụ
-  serviceOrders.forEach(o => {
-    if (!o.createdAt) return;
-    const oDate = new Date(o.createdAt);
-    if (oDate >= startDate) {
-      const dateStr = oDate.toISOString().split('T')[0];
+    // Lọc doanh thu từ dịch vụ đang có trong phiên chạy hiện tại
+    serviceOrders.forEach((o) => {
+      if (!o.createdAt) return;
+      const oDate = new Date(o.createdAt);
+      if (Number.isNaN(oDate.getTime()) || oDate < startDate) return;
+      const dateStr = oDate.toISOString().split("T")[0];
       const amount = Number(o.totalAmount) || 0;
       if (dailyData[dateStr] !== undefined) dailyData[dateStr] += amount;
       filteredRevenue += amount;
-    }
-  });
+    });
 
-  const revenueChart = Object.keys(dailyData).sort().map(date => ({ date, revenue: dailyData[date] }));
+    const revenueChart = Object.keys(dailyData).sort().map(date => ({ date, revenue: dailyData[date] }));
 
-  res.json({ 
-    totalRevenue: filteredRevenue,
-    bookingCount: filteredBookingCount,
-    occupiedRooms: rooms.filter(r => r.status === 'occupied').length,
-    availableRooms: rooms.filter(r => r.status === 'available').length,
-    revenueChart
-  });
+    res.json({
+      totalRevenue: filteredRevenue,
+      bookingCount: filteredBookingCount,
+      occupiedRooms: latestRooms.filter(r => r.status === "occupied").length,
+      availableRooms: latestRooms.filter(r => r.status === "available").length,
+      revenueChart
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
 });
 
 

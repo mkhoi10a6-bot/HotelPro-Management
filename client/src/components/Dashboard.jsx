@@ -14,7 +14,7 @@ import { API_URL } from "../services/config";
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState(7); // Mặc định 7 ngày
+  const [range, setRange] = useState(30); // Mặc định 30 ngày để dễ thấy doanh thu khi báo cáo
   const { token } = useSelector(s => s.hotel || {});
 
   useEffect(() => {
