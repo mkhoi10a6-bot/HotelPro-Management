@@ -7,6 +7,7 @@ server/hotel.db
 .env
 .env.*
 KeyApi
+KeyApi.local
 server/.env
 client/.env
 .DS_Store

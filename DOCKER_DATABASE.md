@@ -8,6 +8,15 @@ App hiện đang dùng SQLite. Cấu hình Docker này lưu file database vào D
 docker compose up --build
 ```
 
+Docker local đọc cấu hình OAuth từ file `KeyApi.local`.
+Tạo file này từ `KeyApi.local.example`, rồi điền Client ID/Secret thật.
+Google Cloud cho Docker local cần:
+
+```text
+Authorized JavaScript origins: http://localhost:5050
+Authorized redirect URIs: http://localhost:5050/signin.com
+```
+
 Mở web:
 
 ```text
