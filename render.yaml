@@ -14,6 +14,14 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CLIENT_ORIGIN
-        value: ""
+        value: https://may-an-nhien.onrender.com
+      - key: FRONTEND_URL
+        value: https://may-an-nhien.onrender.com
+      - key: GOOGLE_REDIRECT_URI
+        value: https://may-an-nhien.onrender.com/signin.com
+      - key: GOOGLE_CLIENT_ID
+        value: 834318076523-7q82f9tjvhnqe2pt1vc1hrmkchg32r5g.apps.googleusercontent.com
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
       - key: GOOGLE_API_KEY
         sync: false

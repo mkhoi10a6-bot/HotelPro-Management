@@ -1,0 +1,15 @@
+.git
+.agents
+.codex
+node_modules
+client/node_modules
+server/node_modules
+client/dist
+server/hotel.db
+npm-debug.log*
+.DS_Store
+.env
+.env.*
+KeyApi
+Dockerfile
+docker-compose*.yml

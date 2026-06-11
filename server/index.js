@@ -18,6 +18,10 @@ db.dbRunP("ALTER TABLE bookings ADD COLUMN total_amount REAL DEFAULT 0")
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-here";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || `http://localhost:${PORT}/signin.com`;
+const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const GMAIL_REGEX = /^[a-z0-9._%+-]+@gmail\.com$/i;
 const passwordResetTokens = new Map();
 const isProduction = process.env.NODE_ENV === "production";
@@ -264,6 +268,8 @@ async function listBookings({ isAdmin, userId, status, dateFrom, dateTo } = {}) 
 const allowedOrigins = new Set([
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:8001',
+  'http://127.0.0.1:8001',
   'https://may-an-nhien.onrender.com',
   ...String(process.env.CLIENT_ORIGIN || "")
     .split(",")
@@ -306,7 +312,7 @@ app.use((req, res, next) => {
 app.disable("x-powered-by");
 app.use(express.json()); 
 app.use(morgan("dev"));
-app.use(["/api/login", "/api/auth/login", "/api/auth/register", "/api/auth/forgot-password", "/api/auth/reset-password"], authLimiter);
+app.use(["/api/login", "/api/auth/login", "/api/auth/register", "/api/auth/forgot-password", "/api/auth/reset-password", "/api/auth/google", "/signin.com"], authLimiter);
 app.use(["/api/public/contact"], publicWriteLimiter);
 
 const clientDistPath = path.resolve(__dirname, "../client/dist");
@@ -338,6 +344,42 @@ function parseJwtPayload(token) {
   } catch {
     return null;
   }
+}
+
+function getPostLoginPath(user) {
+  return user?.role === "admin" ? "/admin/dashboard" : "/booking";
+}
+
+function signAuthResponse(user) {
+  const safeUser = {
+    id: user.id,
+    email: user.email,
+    role: user.role || "customer",
+    name: user.name || user.email,
+    phone: user.phone || "",
+  };
+  const token = jwt.sign(safeUser, JWT_SECRET, { expiresIn: "24h" });
+  return { token, user: safeUser };
+}
+
+function sendGoogleAuthResultPage(res, { token, user }) {
+  const redirectPath = getPostLoginPath(user);
+  const redirectUrl = `${FRONTEND_URL}${redirectPath}`;
+  res.type("html").send(`<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Đang đăng nhập...</title>
+  </head>
+  <body>
+    <script>
+      localStorage.setItem("token", ${JSON.stringify(token)});
+      localStorage.setItem("user", ${JSON.stringify(JSON.stringify(user))});
+      window.location.replace(${JSON.stringify(redirectUrl)});
+    </script>
+  </body>
+</html>`);
 }
 
 function authenticateToken(req, res, next) {
@@ -482,6 +524,105 @@ const handleLogin = async (req, res) => {
 
 app.post("/api/auth/login", handleLogin);
 app.post("/api/login", handleLogin); // Alias as requested
+
+app.get("/api/auth/google", (req, res) => {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return res.status(500).json({ error: "Google Login chưa được cấu hình trên server." });
+  }
+
+  const state = jwt.sign(
+    { purpose: "google-oauth", createdAt: Date.now() },
+    JWT_SECRET,
+    { expiresIn: "10m" }
+  );
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    response_type: "code",
+    scope: "openid email profile",
+    access_type: "offline",
+    prompt: "select_account",
+    state,
+  });
+
+  return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+async function handleGoogleCallback(req, res) {
+  try {
+    const { code, state, error } = req.query || {};
+    if (error) return res.redirect(`${FRONTEND_URL}/login?google=cancelled`);
+    if (!code || !state) return res.redirect(`${FRONTEND_URL}/login?google=missing_code`);
+
+    let statePayload;
+    try {
+      statePayload = jwt.verify(String(state), JWT_SECRET);
+    } catch {
+      return res.redirect(`${FRONTEND_URL}/login?google=invalid_state`);
+    }
+    if (statePayload?.purpose !== "google-oauth") {
+      return res.redirect(`${FRONTEND_URL}/login?google=invalid_state`);
+    }
+
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code: String(code),
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: GOOGLE_REDIRECT_URI,
+        grant_type: "authorization_code",
+      }),
+    });
+    const tokenData = await tokenResponse.json().catch(() => ({}));
+    if (!tokenResponse.ok || !tokenData.id_token) {
+      console.error("Google token exchange failed:", tokenData);
+      return res.redirect(`${FRONTEND_URL}/login?google=token_failed`);
+    }
+
+    const profileResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const profile = await profileResponse.json().catch(() => ({}));
+    if (!profileResponse.ok || !profile.email || profile.email_verified === false) {
+      console.error("Google profile fetch failed:", profile);
+      return res.redirect(`${FRONTEND_URL}/login?google=profile_failed`);
+    }
+
+    const normalizedEmail = String(profile.email).toLowerCase().trim();
+    if (!GMAIL_REGEX.test(normalizedEmail)) {
+      return res.redirect(`${FRONTEND_URL}/login?google=not_gmail`);
+    }
+
+    let user = await new Promise((resolve, reject) => {
+      db.findUserByEmail(normalizedEmail, (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!user) {
+      const generatedPassword = bcrypt.hashSync(`google:${profile.sub}:${Date.now()}`, 10);
+      const result = await db.dbRunP(
+        "INSERT INTO users (email, password, role, name, phone, created_at, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        [normalizedEmail, generatedPassword, "customer", profile.name || normalizedEmail, ""]
+      );
+      user = await db.dbGetP("SELECT * FROM users WHERE id = ?", [result.lastID]);
+    } else if (!user.name && profile.name) {
+      await db.dbRunP("UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [profile.name, user.id]);
+      user = { ...user, name: profile.name };
+    }
+
+    const auth = signAuthResponse(user);
+    return sendGoogleAuthResultPage(res, auth);
+  } catch (e) {
+    return sendError(res, e);
+  }
+}
+
+app.get("/signin.com", handleGoogleCallback);
+app.get("/api/auth/google/callback", handleGoogleCallback);
 
 
 app.post("/api/auth/register", async (req, res) => {

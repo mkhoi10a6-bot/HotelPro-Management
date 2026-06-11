@@ -1,0 +1,24 @@
+services:
+  may-an-nhien:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: may-an-nhien-web
+    env_file:
+      - KeyApi
+    ports:
+      - "5050:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_PATH: /data/hotel.db
+      JWT_SECRET: may-an-nhien-local-docker-secret
+      REQUIRE_HTTPS: "false"
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+    volumes:
+      - may_an_nhien_db:/data
+    restart: unless-stopped
+
+volumes:
+  may_an_nhien_db:
+    name: may_an_nhien_db

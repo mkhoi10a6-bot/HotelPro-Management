@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useDispatch } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { setAuth } from "../features/hotelSlice";
 import { API_URL } from "../services/config";
 
@@ -13,6 +13,7 @@ const PUBLIC_API = `${API_URL}/public`;
 export default function Login() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState("login");
   const [credentials, setCredentials] = useState(initialCredentials);
   const [resetToken, setResetToken] = useState("");
@@ -33,6 +34,21 @@ export default function Login() {
   const [contactForm, setContactForm] = useState({ name: "", email: "", message: "" });
   const [contactStatus, setContactStatus] = useState({ type: null, text: "" });
   const [contactSending, setContactSending] = useState(false);
+
+  useEffect(() => {
+    const googleStatus = new URLSearchParams(location.search).get("google");
+    if (!googleStatus) return;
+
+    const messages = {
+      cancelled: "Bạn đã huỷ đăng nhập Google.",
+      missing_code: "Google chưa trả về mã đăng nhập.",
+      invalid_state: "Phiên đăng nhập Google đã hết hạn. Vui lòng thử lại.",
+      token_failed: "Không thể xác thực với Google. Kiểm tra Client ID, Secret và Redirect URI.",
+      profile_failed: "Không lấy được thông tin tài khoản Google.",
+      not_gmail: "Vui lòng dùng tài khoản Gmail để đăng nhập.",
+    };
+    setError(messages[googleStatus] || "Đăng nhập Google thất bại.");
+  }, [location.search]);
 
   const closePanel = useCallback(() => {
     setActivePanel(null);
@@ -468,6 +484,23 @@ export default function Login() {
                     : "Đăng nhập"}
                 </button>
               </form>
+
+              {(mode === "login" || mode === "register") && (
+                <div className="mt-5">
+                  <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    <span className="h-px flex-1 bg-slate-800" />
+                    <span>hoặc</span>
+                    <span className="h-px flex-1 bg-slate-800" />
+                  </div>
+                  <a
+                    href={`${API_URL}/auth/google`}
+                    className="mt-4 flex w-full items-center justify-center gap-3 rounded-3xl border border-slate-700 bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+                  >
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-base font-black text-blue-600">G</span>
+                    Tiếp tục với Google
+                  </a>
+                </div>
+              )}
 
               <div className="mt-4 text-center text-sm text-slate-400">
                 {mode === "login" ? (
