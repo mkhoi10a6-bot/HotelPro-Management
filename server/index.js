@@ -80,26 +80,34 @@ try {
   console.error("AI Initialization Error:", error.message);
 }
 
-const SYSTEM_INSTRUCTION = `Bạn là trợ lý AI của khách sạn Mây An Nhiên.
-Bạn hỗ trợ hỏi phòng, giá phòng, dịch vụ, đặt phòng, chính sách hủy và các nhu cầu liên quan đến lưu trú.
-Chỉ trả lời nội dung liên quan khách sạn. Nếu người dùng hỏi ngoài chủ đề, hãy lịch sự kéo cuộc trò chuyện về phòng, dịch vụ, đặt phòng hoặc thông tin khách sạn.
-Luôn trả lời bằng tiếng Việt rõ ràng, thân thiện, gần gũi và chuyên nghiệp.
+const SYSTEM_INSTRUCTION = `Bạn là Trợ lý AI của khách sạn "Mây An Nhiên" với slogan "Nghỉ ngơi thật dịu dàng".
+Bạn là gương mặt đại diện của khách sạn, luôn phục vụ thân thiện, tinh tế, lịch sự và chu đáo.
 
-Quy tắc quan trọng:
-- Không tự tạo đơn đặt phòng, không tự đặt món, không tự ghi nhận dịch vụ thay khách.
-- Khi khách muốn ăn, uống, giặt ủi, thuê xe hoặc dùng dịch vụ, hãy giới thiệu lựa chọn phù hợp và hướng dẫn khách vào mục Dịch vụ để thêm vào giỏ hàng, nhập số phòng, thanh toán QR rồi xác nhận.
-- Khi khách muốn đặt phòng, hãy hướng dẫn vào mục Đặt phòng hoặc hỏi thêm ngày nhận phòng, ngày trả phòng, số người và loại phòng.
-- Không trả về JSON thô trong nội dung chat.
+Nhiệm vụ:
+- Hỗ trợ khách hỏi thông tin phòng, giá phòng, dịch vụ ăn uống và tiện ích.
+- Hướng dẫn khách thao tác trên website, đặc biệt các mục Đặt phòng, Dịch vụ và Lịch sử đặt phòng.
+- Giải đáp ngắn gọn về giá cả, tiện nghi, thanh toán và chính sách liên quan lưu trú.
 
-Dữ liệu tham khảo:
-- Phòng Standard: 550.000đ/đêm; VIP/Deluxe: 950.000đ/đêm; Suite Premium: 1.800.000đ/đêm.
+Dữ liệu phòng hiện có trên website:
+- Phòng Standard: 550.000đ/đêm.
+- Phòng VIP/Deluxe: 950.000đ/đêm.
+- Suite Premium: 1.800.000đ/đêm.
+
+Dữ liệu dịch vụ:
 - Đồ ăn: Bánh mì 35.000đ, Phở Bò 65.000đ, Bún Chả Hà Nội 65.000đ, Gỏi Cuốn Tôm Thịt 45.000đ, Cơm Tấm Sườn Bì Chả 60.000đ, Bánh Mì Chảo Đặc Biệt 50.000đ.
 - Đồ uống: Cafe muối 40.000đ, Nước suối 15.000đ, Trà đào 30.000đ, Trà Mãng Cầu Xiêm 40.000đ, Cà Phê Trứng Hà Nội 50.000đ, Nước Ép Trái Cây Tươi 30.000đ, Sinh Tố Bơ Sáp 40.000đ.
 - Dịch vụ khác: Giặt ủi 50.000đ, Thuê xe máy 150.000đ.
 
-Tone: Tâm lý, biết đoán nhu cầu, nhưng không bịa dữ liệu ngoài hệ thống. Always identify as "Mây An Nhiên".`;
+Quy tắc trả lời:
+- Luôn xưng "em" và gọi khách là "Anh/Chị".
+- Câu trả lời dưới 4 câu, nhẹ nhàng, rõ ý, không dài dòng.
+- Không tự đặt phòng, không tự đặt món, không tự ghi nhận dịch vụ thay khách.
+- Khi khách muốn dùng đồ ăn, đồ uống hoặc dịch vụ, hãy hướng dẫn vào mục Dịch vụ, điền Ghi chú nếu cần, thêm vào giỏ hàng, nhập số phòng, thanh toán QR và xác nhận.
+- Chỉ trả lời thông tin có trong dữ liệu khách sạn. Nếu khách hỏi ngoài lề, từ chối khéo và kéo về phòng, dịch vụ hoặc đặt phòng.
+- Nếu khách phàn nàn, tức giận, lỗi thanh toán, trùng phòng, thái độ phục vụ hoặc yêu cầu gặp admin/quản lý, trả lời xin lỗi và thêm marker [TRIGGER_TRANSFER_TO_ADMIN] ở cuối để hệ thống chuyển cho quản trị viên.
+- Không trả về JSON thô trong nội dung chat.`;
 
-function getChatbotFallback(message, userName = "quý khách") {
+function getChatbotFallback(message, userName = "Anh/Chị") {
   const text = String(message || "").toLowerCase();
   const clean = text
     .normalize("NFD")
@@ -108,6 +116,7 @@ function getChatbotFallback(message, userName = "quý khách") {
 
   const hasAny = (keywords) => keywords.some((keyword) => text.includes(keyword) || clean.includes(keyword));
   const money = (value) => `${value.toLocaleString("vi-VN")}đ`;
+  const guest = "Anh/Chị";
   const serviceCatalog = {
     food: {
       title: "đồ ăn",
@@ -144,25 +153,37 @@ function getChatbotFallback(message, userName = "quý khách") {
   const matchedItem = allServiceItems.find((item) => item.names.some((name) => text.includes(name) || clean.includes(name)));
   const formatItems = (items) => items.map((item) => `- ${item.label}: ${money(item.price)}`).join("\n");
   const serviceSteps =
-    "Cách thao tác: vào mục Dịch vụ ở thanh bên trái, chọn món/dịch vụ, nhập ghi chú nếu cần, bấm Thêm vào giỏ hàng, nhập số phòng, sau đó thanh toán bằng QR và xác nhận.";
+    "Anh/Chị vào mục Dịch vụ bên trái, điền ô Ghi chú nếu cần, bấm Thêm vào giỏ hàng, nhập số phòng rồi thanh toán QR và xác nhận.";
   const buildServiceGuide = (groupKey, intro) => {
     const group = serviceCatalog[groupKey];
     return {
       reply:
-        `Dạ ${userName}, ${intro}\n` +
+        `Dạ ${guest}, ${intro}\n` +
         `${formatItems(group.items)}\n\n` +
-        `${serviceSteps}\n\n` +
-        "Tôi sẽ hướng dẫn bạn chọn đúng mục, còn đơn chỉ được tạo khi bạn bấm xác nhận trong giỏ hàng.",
+        serviceSteps,
       suggestedActions: ["Xem đồ ăn", "Xem đồ uống", "Dịch vụ khác"],
     };
   };
 
+  if (hasAny([
+    "bực", "tức", "tệ", "không hài lòng", "khong hai long", "phàn nàn", "phan nan", "khiếu nại", "khieu nai",
+    "lỗi thanh toán", "loi thanh toan", "trùng phòng", "trung phong", "gặp admin", "gap admin", "quản lý", "quan ly",
+    "thái độ", "thai do", "hoàn tiền ngay", "hoan tien ngay"
+  ])) {
+    return {
+      reply:
+        "Dạ Mây An Nhiên chân thành xin lỗi Anh/Chị về trải nghiệm không thoải mái này ạ. " +
+        "Em sẽ chuyển thông tin và đoạn chat này trực tiếp cho bộ phận Lễ tân/Quản trị viên liên hệ xử lý ngay cho mình nhé ạ.",
+      suggestedActions: ["Liên hệ lễ tân", "Lịch sử đặt phòng"],
+      transferToAdmin: true,
+    };
+  }
+
   if (matchedItem) {
     return {
       reply:
-        `Dạ ${userName}, ${matchedItem.label} hiện có giá ${money(matchedItem.price)}. ` +
-        "Bạn đặt món/dịch vụ này trong mục Dịch vụ để hệ thống đưa vào giỏ hàng và tạo thanh toán QR chính xác.\n\n" +
-        serviceSteps,
+        `Dạ ${guest}, ${matchedItem.label} hiện có giá ${money(matchedItem.price)} ạ. ` +
+        `${serviceSteps} Em không tự đặt trong chat để tránh sai đơn và sai hóa đơn cho mình.`,
       suggestedActions: ["Xem dịch vụ", "Xem đồ uống", "Xem đồ ăn"],
     };
   }
@@ -170,8 +191,8 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hasAny(["đặt phòng", "dat phong", "booking", "book", "reservation"])) {
     return {
       reply:
-        `Dạ ${userName}, nếu muốn đặt phòng bạn vào mục Đặt phòng ở thanh bên trái, chọn hạng phòng, ngày nhận/trả phòng rồi xác nhận thanh toán. ` +
-        "Nếu bạn chưa chắc chọn loại nào, tôi có thể gợi ý theo số người, ngân sách và số đêm lưu trú.",
+        `Dạ ${guest}, Anh/Chị vào mục Đặt phòng bên trái, chọn hạng phòng, ngày nhận/trả phòng rồi xác nhận thanh toán ạ. ` +
+        "Nếu chưa chắc chọn loại nào, em có thể gợi ý theo số người, ngân sách và số đêm lưu trú.",
       suggestedActions: ["Giá phòng", "Phòng Standard", "Phòng VIP"],
     };
   }
@@ -179,10 +200,10 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hasAny(["checkin", "check-in", "check in", "checkout", "check-out", "check out", "nhận phòng", "nhan phong", "trả phòng", "tra phong"])) {
     return {
       reply:
-        `Dạ ${userName}, thời gian nhận/trả phòng tham khảo:\n` +
+        `Dạ ${guest}, thời gian nhận/trả phòng tham khảo:\n` +
         "- Nhận phòng: từ 14:00\n" +
         "- Trả phòng: trước 12:00\n\n" +
-        "Nếu bạn cần nhận phòng sớm hoặc trả phòng muộn, lễ tân sẽ kiểm tra tình trạng phòng và hỗ trợ theo khả năng.",
+        "Nếu Anh/Chị cần nhận phòng sớm hoặc trả phòng muộn, lễ tân sẽ kiểm tra tình trạng phòng và hỗ trợ theo khả năng ạ.",
       suggestedActions: ["Đặt phòng", "Giá phòng", "Liên hệ lễ tân"],
     };
   }
@@ -190,11 +211,8 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hasAny(["hủy", "huy", "hoàn tiền", "hoan tien", "refund", "đổi lịch", "doi lich", "chính sách", "chinh sach"])) {
     return {
       reply:
-        `Dạ ${userName}, chính sách tham khảo của Mây An Nhiên:\n` +
-        "- Có thể hỗ trợ đổi lịch nếu báo trước ngày nhận phòng.\n" +
-        "- Hủy phòng/hoàn tiền phụ thuộc thời điểm hủy và trạng thái thanh toán.\n" +
-        "- Với đơn đã thanh toán, lễ tân sẽ kiểm tra và xác nhận lại trước khi xử lý.\n\n" +
-        "Bạn gửi mã đặt phòng hoặc email đặt phòng để tôi hướng dẫn tiếp nhé.",
+        `Dạ ${guest}, Mây An Nhiên có thể hỗ trợ đổi lịch nếu Anh/Chị báo trước ngày nhận phòng ạ. ` +
+        "Hủy phòng hoặc hoàn tiền sẽ phụ thuộc thời điểm hủy và trạng thái thanh toán, nên Anh/Chị vui lòng gửi mã đặt phòng để lễ tân kiểm tra chính xác.",
       suggestedActions: ["Liên hệ lễ tân", "Đặt phòng", "Giá phòng"],
     };
   }
@@ -202,8 +220,8 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hasAny(["thanh toán", "thanh toan", "qr", "chuyển khoản", "chuyen khoan", "tiền mặt", "tien mat", "invoice", "hóa đơn", "hoa don"])) {
     return {
       reply:
-        `Dạ ${userName}, với đặt phòng và dịch vụ trong hệ thống, bạn thanh toán bằng QR ngay ở bước xác nhận. ` +
-        "Sau khi chuyển khoản, bấm xác nhận để hệ thống lưu đơn và cập nhật trạng thái. Nếu cần kiểm tra hóa đơn, bạn liên hệ lễ tân hoặc xem lại lịch sử trong tài khoản.",
+        `Dạ ${guest}, với đặt phòng và dịch vụ trên website, Anh/Chị thanh toán bằng QR ngay ở bước xác nhận ạ. ` +
+        "Sau khi chuyển khoản, mình bấm xác nhận để hệ thống lưu đơn; nếu cần kiểm tra lại, Anh/Chị xem mục Lịch sử đặt phòng hoặc liên hệ lễ tân.",
       suggestedActions: ["Dịch vụ", "Đặt phòng", "Liên hệ lễ tân"],
     };
   }
@@ -211,8 +229,8 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hasAny(["mệt", "met", "khó chịu", "kho chiu", "nóng", "nong", "lạnh", "lanh", "ồn", "ồn ào", "on ao"])) {
     return {
       reply:
-        `Dạ ${userName}, nghe có vẻ bạn đang cần hỗ trợ tại phòng. ` +
-        "Bạn gửi giúp số phòng và tình trạng cụ thể, ví dụ: Phòng 302 máy lạnh yếu hoặc phòng hơi ồn, tôi sẽ hướng dẫn liên hệ lễ tân xử lý nhanh.",
+        `Dạ ${guest}, nghe có vẻ Anh/Chị đang cần hỗ trợ tại phòng ạ. ` +
+        "Anh/Chị gửi giúp em số phòng và tình trạng cụ thể, ví dụ: Phòng 302 máy lạnh yếu hoặc phòng hơi ồn, để lễ tân hỗ trợ nhanh hơn.",
       suggestedActions: ["Liên hệ lễ tân", "Dịch vụ", "Dọn phòng"],
     };
   }
@@ -220,18 +238,18 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hasAny(["lỗi", "loi", "hỏng", "bẩn", "khiếu nại", "khieu nai", "dọn phòng", "don phong", "máy lạnh", "may lanh", "nước nóng", "nuoc nong"])) {
     return {
       reply:
-        `Dạ ${userName}, tôi đã hiểu là bạn cần hỗ trợ sự cố/dịch vụ phòng. ` +
-        "Bạn vui lòng gửi số phòng và mô tả ngắn vấn đề, ví dụ: Phòng 302 máy lạnh yếu. Tôi sẽ hướng dẫn liên hệ lễ tân xử lý nhanh.",
+        `Dạ ${guest}, em đã hiểu là Anh/Chị cần hỗ trợ sự cố hoặc dịch vụ phòng ạ. ` +
+        "Anh/Chị vui lòng gửi số phòng và mô tả ngắn vấn đề, ví dụ: Phòng 302 máy lạnh yếu, để lễ tân xử lý nhanh.",
       suggestedActions: ["Liên hệ lễ tân", "Dịch vụ", "Dọn phòng"],
     };
   }
 
   if (hasAny(["khát", "khat", "uống", "uong", "đồ uống", "do uong", "nước", "nuoc", "cafe", "cà phê", "ca phe", "trà", "tra", "sinh tố", "sinh to"])) {
-    return buildServiceGuide("drink", "nếu bạn đang khát hoặc muốn gọi đồ uống, mình gợi ý các món sau:");
+    return buildServiceGuide("drink", "nếu Anh/Chị đang khát hoặc muốn gọi đồ uống, em gợi ý các món sau ạ:");
   }
 
   if (hasAny(["đói", "doi", "ăn", "an ", "đồ ăn", "do an", "món", "mon", "bữa", "bua", "cơm", "com", "phở", "bún", "bun", "bánh", "banh"])) {
-    return buildServiceGuide("food", "nếu bạn muốn ăn nhẹ hoặc gọi bữa chính, thực đơn đang có:");
+    return buildServiceGuide("food", "nếu Anh/Chị muốn ăn nhẹ hoặc gọi bữa chính, thực đơn đang có:");
   }
 
   if (hasAny(["giặt", "giat", "quần áo", "quan ao", "thuê xe", "thue xe", "xe máy", "xe may", "laundry", "motorbike"])) {
@@ -241,13 +259,12 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hasAny(["dịch vụ", "dich vu", "tiện ích", "tien ich", "menu", "thực đơn", "thuc don"])) {
     return {
       reply:
-        `Dạ ${userName}, trong mục Dịch vụ hiện có 3 nhóm chính:\n` +
+        `Dạ ${guest}, trong mục Dịch vụ hiện có 3 nhóm chính:\n` +
         "- Đồ ăn: bánh mì, phở bò, bún chả, cơm tấm, gỏi cuốn...\n" +
         "- Đồ uống: cafe muối, nước suối, trà đào, trà mãng cầu, cà phê trứng, nước ép, sinh tố bơ...\n" +
         "- Dịch vụ khác: giặt ủi, thuê xe máy.\n\n" +
-        `${serviceSteps}\n\n` +
-        "Bạn đang muốn ăn, uống hay dùng dịch vụ nào để tôi gợi ý nhanh hơn?",
-      suggestedActions: ["Tôi muốn ăn", "Tôi khát", "Giặt ủi"],
+        `${serviceSteps}`,
+      suggestedActions: ["Muốn ăn", "Đồ uống", "Giặt ủi"],
     };
   }
 
@@ -256,18 +273,18 @@ function getChatbotFallback(message, userName = "quý khách") {
     if (roomText && !hasAny(["standard", "vip", "suite"])) {
       return {
         reply:
-          `Dạ ${userName}, nếu bạn cần hỗ trợ cho phòng ${roomText[1]}, bạn có thể nói rõ nhu cầu như gọi món, giặt ủi, dọn phòng hoặc báo sự cố. ` +
-          "Nếu muốn dùng dịch vụ, bạn vào mục Dịch vụ để thêm vào giỏ hàng và thanh toán QR.",
+          `Dạ ${guest}, nếu cần hỗ trợ cho phòng ${roomText[1]}, Anh/Chị có thể nói rõ nhu cầu như gọi món, giặt ủi, dọn phòng hoặc báo sự cố ạ. ` +
+          "Nếu muốn dùng dịch vụ có phí, mình vào mục Dịch vụ để thêm vào giỏ hàng và thanh toán QR.",
         suggestedActions: ["Dịch vụ", "Liên hệ lễ tân", "Giá phòng"],
       };
     }
     return {
       reply:
-        `Dạ ${userName}, Mây An Nhiên hiện có các hạng phòng:\n` +
+        `Dạ ${guest}, Mây An Nhiên hiện có các hạng phòng:\n` +
         "- Phòng Standard: 550.000đ/đêm\n" +
         "- Phòng VIP/Deluxe: 950.000đ/đêm\n" +
         "- Suite Premium: 1.800.000đ/đêm\n\n" +
-        "Nếu muốn đặt, bạn vào mục Đặt phòng để chọn ngày và thanh toán nhé.",
+        "Nếu muốn đặt, Anh/Chị vào mục Đặt phòng để chọn ngày và thanh toán nhé ạ.",
       suggestedActions: ["Đặt phòng", "Xem dịch vụ", "Liên hệ lễ tân"],
     };
   }
@@ -275,15 +292,15 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hasAny(["gọi", "goi", "đặt", "dat", "mua", "order", "lấy", "lay"])) {
     return {
       reply:
-        `Dạ ${userName}, để tránh đặt nhầm và để hệ thống lên đúng hóa đơn, mình chưa tự tạo đơn trong chat. ` +
-        "Bạn vào mục Dịch vụ, chọn món hoặc dịch vụ cần dùng, bấm Thêm vào giỏ hàng, nhập số phòng và thanh toán QR là đơn sẽ tự xuất hiện trong quản lý dịch vụ.",
+        `Dạ ${guest}, để tránh đặt nhầm và để hệ thống lên đúng hóa đơn, em chưa tự tạo đơn trong chat ạ. ` +
+        "Anh/Chị vào mục Dịch vụ, chọn món hoặc dịch vụ cần dùng, bấm Thêm vào giỏ hàng, nhập số phòng và thanh toán QR nhé.",
       suggestedActions: ["Dịch vụ", "Thực đơn", "Đồ uống"],
     };
   }
 
   if (hasAny(["cảm ơn", "cam on", "thanks", "thank you"])) {
     return {
-      reply: `Rất vui được hỗ trợ ${userName}. Khi cần hỏi phòng, dịch vụ, thanh toán hoặc chính sách hủy, bạn nhắn tôi nhé.`,
+      reply: "Dạ, em rất vui được hỗ trợ Anh/Chị ạ. Khi cần hỏi phòng, dịch vụ, thanh toán hoặc chính sách hủy, Anh/Chị nhắn em nhé.",
       suggestedActions: ["Giá phòng", "Dịch vụ", "Đặt phòng"],
     };
   }
@@ -291,15 +308,15 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hasAny(["liên hệ", "lien he", "lễ tân", "le tan", "hotline", "địa chỉ", "dia chi", "ở đâu", "o dau"])) {
     return {
       reply:
-        `Dạ ${userName}, bạn có thể liên hệ lễ tân Mây An Nhiên để được hỗ trợ trực tiếp về đặt phòng, dịch vụ, thanh toán hoặc yêu cầu phát sinh. ` +
-        "Nếu đang ở trong hệ thống, bạn gửi nội dung cần hỗ trợ, tôi sẽ hướng dẫn bước tiếp theo.",
+        `Dạ ${guest}, Anh/Chị có thể liên hệ lễ tân Mây An Nhiên để được hỗ trợ trực tiếp về đặt phòng, dịch vụ, thanh toán hoặc yêu cầu phát sinh ạ. ` +
+        "Nếu đang ở trong hệ thống, Anh/Chị gửi nội dung cần hỗ trợ, em sẽ hướng dẫn bước tiếp theo.",
       suggestedActions: ["Đặt phòng", "Dịch vụ", "Giá phòng"],
     };
   }
 
   if (hasAny(["xin chào", "chao", "hello", "hi"])) {
     return {
-      reply: `Xin chào ${userName}! Tôi là trợ lý AI của Mây An Nhiên. Bạn cần hỏi giá phòng, đặt phòng, đồ ăn, đồ uống hay dịch vụ khác ạ?`,
+      reply: "Dạ em chào Anh/Chị, em là trợ lý AI của Mây An Nhiên. Anh/Chị cần hỏi giá phòng, đặt phòng, đồ ăn, đồ uống hay dịch vụ khác ạ?",
       suggestedActions: ["Giá phòng", "Dịch vụ", "Đặt phòng"],
     };
   }
@@ -312,8 +329,8 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hotelRelated) {
     return {
       reply:
-        `Dạ ${userName}, tôi có thể hỗ trợ thông tin khách sạn Mây An Nhiên về giá phòng, đặt phòng, dịch vụ, thực đơn, thanh toán và chính sách hủy. ` +
-        "Bạn nói rõ hơn nhu cầu của mình để tôi hỗ trợ chính xác nhé.",
+        "Dạ, em có thể hỗ trợ Anh/Chị về giá phòng, đặt phòng, dịch vụ, thực đơn, thanh toán và chính sách hủy của Mây An Nhiên ạ. " +
+        "Anh/Chị nói rõ hơn nhu cầu để em hỗ trợ chính xác nhé.",
       suggestedActions: ["Giá phòng", "Dịch vụ", "Đặt phòng"],
     };
   }
@@ -617,9 +634,9 @@ function authenticateToken(req, res, next) {
 app.post("/api/chatbot/respond", authenticateToken, async (req, res) => {
   try {
     const { message } = req.body || {};
-    if (!message) return res.json({ reply: "Mây An Nhiên xin chào! Quý khách cần hỗ trợ gì về phòng hay thực đơn ạ?", suggestedActions: [] });
+    if (!message) return res.json({ reply: "Dạ Mây An Nhiên xin chào Anh/Chị ạ. Anh/Chị cần em hỗ trợ về phòng, dịch vụ hay đặt phòng?", suggestedActions: [] });
 
-    const userName = req.user?.name || "quý khách";
+    const userName = req.user?.name || "Anh/Chị";
     const deterministicReply = getChatbotFallback(message, userName);
     if (deterministicReply) {
       return res.json({
@@ -630,9 +647,9 @@ app.post("/api/chatbot/respond", authenticateToken, async (req, res) => {
 
     if (!genAI) {
       return res.json({ 
-        reply: "Tôi đã sẵn sàng hỗ trợ thông tin khách sạn. Bạn có thể hỏi về giá phòng, thực đơn hoặc đặt phòng nhé.",
+        reply: "Dạ, em đã sẵn sàng hỗ trợ Anh/Chị về giá phòng, đặt phòng hoặc dịch vụ của Mây An Nhiên ạ.",
         detectedLanguage: "vi",
-        suggestedActions: ["Giá phòng", "Thực đơn hôm nay", "Đặt phòng"],
+        suggestedActions: ["Giá phòng", "Dịch vụ", "Đặt phòng"],
       });
     }
 
@@ -644,20 +661,24 @@ app.post("/api/chatbot/respond", authenticateToken, async (req, res) => {
     // Truyền tên người dùng vào prompt để AI có thể cá nhân hóa câu trả lời
     const prompt = `Người dùng tên là ${userName}. Câu hỏi: ${message}`;
     const result = await model.generateContent(prompt);
-    const responseText = result.response.text().trim();
+    let responseText = result.response.text().trim();
+    const transferToAdmin = responseText.includes("[TRIGGER_TRANSFER_TO_ADMIN]");
+    responseText = responseText.replace("[TRIGGER_TRANSFER_TO_ADMIN]", "").trim();
 
     return res.json({ 
       reply: responseText,
       detectedLanguage: "vi",
-      suggestedActions: [] 
+      suggestedActions: [],
+      transferToAdmin,
     });
   } catch (error) {
     console.error("Gemini API Error:", error.message || error);
-    const fallback = getChatbotFallback(req.body?.message, req.user?.name || "quý khách");
+    const fallback = getChatbotFallback(req.body?.message, req.user?.name || "Anh/Chị");
     return res.json({ 
-      reply: fallback?.reply || "Tôi là trợ lý của khách sạn Mây An Nhiên. Hiện tôi chỉ hỗ trợ các nội dung về phòng, giá phòng, dịch vụ, đặt phòng, thanh toán và chính sách hủy. Bạn cần hỗ trợ mục nào ạ?",
+      reply: fallback?.reply || "Dạ, em chưa hiểu rõ ý của Anh/Chị lắm ạ. Anh/Chị đang muốn tìm hiểu về các hạng phòng nghỉ hay các dịch vụ ăn uống tại Mây An Nhiên thế ạ?",
       detectedLanguage: "vi",
-      suggestedActions: fallback?.suggestedActions || ["Giá phòng", "Thực đơn hôm nay", "Đặt phòng"]
+      suggestedActions: fallback?.suggestedActions || ["Giá phòng", "Dịch vụ", "Đặt phòng"],
+      transferToAdmin: Boolean(fallback?.transferToAdmin),
     });
   }
 });
