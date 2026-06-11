@@ -83,31 +83,21 @@ try {
 const SYSTEM_INSTRUCTION = `Bạn là trợ lý AI của khách sạn Mây An Nhiên.
 Bạn hỗ trợ hỏi phòng, giá phòng, dịch vụ, đặt phòng, chính sách hủy và các nhu cầu liên quan đến lưu trú.
 Chỉ trả lời nội dung liên quan khách sạn. Nếu người dùng hỏi ngoài chủ đề, hãy lịch sự kéo cuộc trò chuyện về phòng, dịch vụ, đặt phòng hoặc thông tin khách sạn.
-Luôn trả lời bằng tiếng Việt rõ ràng, thân thiện, chuyên nghiệp.
+Luôn trả lời bằng tiếng Việt rõ ràng, thân thiện, gần gũi và chuyên nghiệp.
 
-Role: You are the Hotel System Core Engine. Your primary responsibility is to act as a bridge between Guest requests and the Admin Management System.
+Quy tắc quan trọng:
+- Không tự tạo đơn đặt phòng, không tự đặt món, không tự ghi nhận dịch vụ thay khách.
+- Khi khách muốn ăn, uống, giặt ủi, thuê xe hoặc dùng dịch vụ, hãy giới thiệu lựa chọn phù hợp và hướng dẫn khách vào mục Dịch vụ để thêm vào giỏ hàng, nhập số phòng, thanh toán QR rồi xác nhận.
+- Khi khách muốn đặt phòng, hãy hướng dẫn vào mục Đặt phòng hoặc hỏi thêm ngày nhận phòng, ngày trả phòng, số người và loại phòng.
+- Không trả về JSON thô trong nội dung chat.
 
-1. Data Context & State Management:
-- Room Inventory: Standard (550k), VIP/Deluxe (950k), Suite Premium (1.800k).
-- Services: Food (Phở Bò: 65k, Cơm Tấm: 60k, Bánh mì: 35k, Bún Chả: 65k); Drinks (Cafe muối: 35k, Trà đào: 30k, Nước suối: 10k).
+Dữ liệu tham khảo:
+- Phòng Standard: 550.000đ/đêm; VIP/Deluxe: 950.000đ/đêm; Suite Premium: 1.800.000đ/đêm.
+- Đồ ăn: Bánh mì 35.000đ, Phở Bò 65.000đ, Bún Chả Hà Nội 65.000đ, Gỏi Cuốn Tôm Thịt 45.000đ, Cơm Tấm Sườn Bì Chả 60.000đ, Bánh Mì Chảo Đặc Biệt 50.000đ.
+- Đồ uống: Cafe muối 40.000đ, Nước suối 15.000đ, Trà đào 30.000đ, Trà Mãng Cầu Xiêm 40.000đ, Cà Phê Trứng Hà Nội 50.000đ, Nước Ép Trái Cây Tươi 30.000đ, Sinh Tố Bơ Sáp 40.000đ.
+- Dịch vụ khác: Giặt ủi 50.000đ, Thuê xe máy 150.000đ.
 
-2. Transaction & Logic Rules (CRITICAL):
-- Automatic Revenue Calculation: Every time a guest books a room or orders a service, calculate: Total = (Room Price * Nights) + Sum(Service Prices).
-- Real-time Admin Update Trigger: When a guest confirms an order, you must generate a structured notification for the Admin including: Room Number, Customer Name, Specific Items, and Status: PENDING.
-- Financial Integrity: Distinguish between Collected Revenue (Paid) và Expected Revenue (Pending/Unpaid). Update these values immediately upon any transaction.
-
-3. Output Format Control:
-- For Admin Interface: Always provide updates in a clear, structured list. 
-  Example: [UPDATE] Room 302 - Order: 01 Phở Bò, 01 Cafe Muối - Total: 100k - Action: Notify Staff.
-- For System Stability: Never return raw Objects/JSON directly into the chat UI unless requested. Always wrap responses in clean Vietnamese prose to avoid "white screen" or "parsing errors" on the frontend.
-
-4. Operational Constraints:
-- Language: Professional, precise, and system-oriented Vietnamese.
-- If a guest asks "Đói quá" or "Ăn gì", suggest menu items with prices and ask for their Room Number to link the revenue.
-- Prevent unauthorized access: Only process orders if a Room Number is identified.
-- Safety: If the system cannot calculate a value, return "Đang cập nhật..." instead of an error.
-
-Tone: Professional, precise, and system-oriented. Always identify as "Mây An Nhiên".`;
+Tone: Tâm lý, biết đoán nhu cầu, nhưng không bịa dữ liệu ngoài hệ thống. Always identify as "Mây An Nhiên".`;
 
 function getChatbotFallback(message, userName = "quý khách") {
   const text = String(message || "").toLowerCase();
@@ -117,69 +107,83 @@ function getChatbotFallback(message, userName = "quý khách") {
     .replace(/đ/g, "d");
 
   const hasAny = (keywords) => keywords.some((keyword) => text.includes(keyword) || clean.includes(keyword));
-  const menuItems = [
-    { names: ["phở bò", "pho bo"], label: "Phở bò", price: 65000 },
-    { names: ["cơm tấm", "com tam"], label: "Cơm tấm", price: 60000 },
-    { names: ["bánh mì", "banh mi"], label: "Bánh mì", price: 35000 },
-    { names: ["bún chả", "bun cha"], label: "Bún chả", price: 65000 },
-    { names: ["cafe muối", "cafe muoi", "cà phê muối", "ca phe muoi"], label: "Cafe muối", price: 35000 },
-    { names: ["trà đào", "tra dao"], label: "Trà đào", price: 30000 },
-    { names: ["nước suối", "nuoc suoi"], label: "Nước suối", price: 10000 },
-  ];
-  const matchedItem = menuItems.find((item) => item.names.some((name) => text.includes(name) || clean.includes(name)));
-  const roomMatch = clean.match(/(?:phong|room)\s*(\d{2,4})/) || clean.match(/\b(\d{3})\b/);
-
-  if (matchedItem && hasAny(["gọi", "goi", "đặt", "dat", "mua", "order", "lay", "lấy"])) {
-    const roomText = roomMatch?.[1]
-      ? `Tôi đã ghi nhận yêu cầu ${matchedItem.label} cho phòng ${roomMatch[1]}. Tổng tạm tính: ${matchedItem.price.toLocaleString("vi-VN")}đ.`
-      : `Dạ ${userName}, ${matchedItem.label} có giá ${matchedItem.price.toLocaleString("vi-VN")}đ. Bạn cho tôi xin số phòng để ghi nhận đơn nhé.`;
+  const money = (value) => `${value.toLocaleString("vi-VN")}đ`;
+  const serviceCatalog = {
+    food: {
+      title: "đồ ăn",
+      items: [
+        { names: ["bánh mì", "banh mi"], label: "Bánh mì", price: 35000 },
+        { names: ["phở bò", "pho bo"], label: "Phở Bò", price: 65000 },
+        { names: ["bún chả", "bun cha"], label: "Bún Chả Hà Nội", price: 65000 },
+        { names: ["gỏi cuốn", "goi cuon", "gỏi cuốn tôm thịt", "goi cuon tom thit"], label: "Gỏi Cuốn Tôm Thịt", price: 45000 },
+        { names: ["cơm tấm", "com tam", "cơm tấm sườn", "com tam suon"], label: "Cơm Tấm Sườn Bì Chả", price: 60000 },
+        { names: ["bánh mì chảo", "banh mi chao"], label: "Bánh Mì Chảo Đặc Biệt", price: 50000 },
+      ],
+    },
+    drink: {
+      title: "đồ uống",
+      items: [
+        { names: ["cafe muối", "cafe muoi", "cà phê muối", "ca phe muoi"], label: "Cafe muối", price: 40000 },
+        { names: ["nước suối", "nuoc suoi"], label: "Nước suối", price: 15000 },
+        { names: ["trà đào", "tra dao"], label: "Trà đào", price: 30000 },
+        { names: ["trà mãng cầu", "tra mang cau", "mãng cầu", "mang cau"], label: "Trà Mãng Cầu Xiêm", price: 40000 },
+        { names: ["cà phê trứng", "ca phe trung", "cafe trứng", "cafe trung"], label: "Cà Phê Trứng Hà Nội", price: 50000 },
+        { names: ["nước ép", "nuoc ep", "nước ép trái cây", "nuoc ep trai cay"], label: "Nước Ép Trái Cây Tươi", price: 30000 },
+        { names: ["sinh tố bơ", "sinh to bo", "bơ sáp", "bo sap"], label: "Sinh Tố Bơ Sáp", price: 40000 },
+      ],
+    },
+    other: {
+      title: "dịch vụ khác",
+      items: [
+        { names: ["giặt ủi", "giat ui", "giặt đồ", "giat do", "giặt", "giat", "laundry"], label: "Giặt ủi", price: 50000 },
+        { names: ["thuê xe máy", "thue xe may", "xe máy", "xe may", "motorbike"], label: "Thuê xe máy", price: 150000 },
+      ],
+    },
+  };
+  const allServiceItems = Object.values(serviceCatalog).flatMap((group) => group.items);
+  const matchedItem = allServiceItems.find((item) => item.names.some((name) => text.includes(name) || clean.includes(name)));
+  const formatItems = (items) => items.map((item) => `- ${item.label}: ${money(item.price)}`).join("\n");
+  const serviceSteps =
+    "Cách thao tác: vào mục Dịch vụ ở thanh bên trái, chọn món/dịch vụ, nhập ghi chú nếu cần, bấm Thêm vào giỏ hàng, nhập số phòng, sau đó thanh toán bằng QR và xác nhận.";
+  const buildServiceGuide = (groupKey, intro) => {
+    const group = serviceCatalog[groupKey];
     return {
       reply:
-        `${roomText}\n\n` +
-        "Nếu cần thêm món, bạn có thể nhắn ví dụ: Gọi phở bò phòng 302.",
-      suggestedActions: ["Thực đơn hôm nay", "Gọi cafe muối", "Xem giá phòng"],
+        `Dạ ${userName}, ${intro}\n` +
+        `${formatItems(group.items)}\n\n` +
+        `${serviceSteps}\n\n` +
+        "Tôi sẽ hướng dẫn bạn chọn đúng mục, còn đơn chỉ được tạo khi bạn bấm xác nhận trong giỏ hàng.",
+      suggestedActions: ["Xem đồ ăn", "Xem đồ uống", "Dịch vụ khác"],
+    };
+  };
+
+  if (matchedItem) {
+    return {
+      reply:
+        `Dạ ${userName}, ${matchedItem.label} hiện có giá ${money(matchedItem.price)}. ` +
+        "Bạn đặt món/dịch vụ này trong mục Dịch vụ để hệ thống đưa vào giỏ hàng và tạo thanh toán QR chính xác.\n\n" +
+        serviceSteps,
+      suggestedActions: ["Xem dịch vụ", "Xem đồ uống", "Xem đồ ăn"],
     };
   }
 
-  if (hasAny(["giá", "gia", "phòng", "phong", "bao nhiêu", "bao nhieu"])) {
+  if (hasAny(["đặt phòng", "dat phong", "booking", "book", "reservation"])) {
     return {
       reply:
-        `Dạ ${userName}, Mây An Nhiên hiện có các hạng phòng:\n` +
-        "- Phòng Standard: 550.000đ/đêm\n" +
-        "- Phòng VIP/Deluxe: 950.000đ/đêm\n" +
-        "- Suite Premium: 1.800.000đ/đêm\n\n" +
-        "Bạn muốn đặt loại phòng nào và ở mấy đêm ạ?",
-      suggestedActions: ["Đặt phòng Standard", "Đặt phòng VIP", "Xem dịch vụ"],
+        `Dạ ${userName}, nếu muốn đặt phòng bạn vào mục Đặt phòng ở thanh bên trái, chọn hạng phòng, ngày nhận/trả phòng rồi xác nhận thanh toán. ` +
+        "Nếu bạn chưa chắc chọn loại nào, tôi có thể gợi ý theo số người, ngân sách và số đêm lưu trú.",
+      suggestedActions: ["Giá phòng", "Phòng Standard", "Phòng VIP"],
     };
   }
 
-  if (hasAny(["thực đơn", "thuc don", "menu", "ăn", "an ", "đói", "doi", "uống", "uong", "đồ ăn", "do an"])) {
+  if (hasAny(["checkin", "check-in", "check in", "checkout", "check-out", "check out", "nhận phòng", "nhan phong", "trả phòng", "tra phong"])) {
     return {
       reply:
-        `Dạ ${userName}, thực đơn hôm nay của Mây An Nhiên gồm:\n` +
-        "- Phở bò: 65.000đ\n" +
-        "- Cơm tấm: 60.000đ\n" +
-        "- Bánh mì: 35.000đ\n" +
-        "- Bún chả: 65.000đ\n" +
-        "- Cafe muối: 35.000đ\n" +
-        "- Trà đào: 30.000đ\n" +
-        "- Nước suối: 10.000đ\n\n" +
-        "Bạn muốn gọi món nào? Nếu đang ở khách sạn, cho tôi xin số phòng để ghi nhận đơn nhé.",
-      suggestedActions: ["Gọi phở bò", "Gọi cafe muối", "Xem giá phòng"],
-    };
-  }
-
-  if (hasAny(["dịch vụ", "dich vu", "tiện ích", "tien ich", "wifi", "hồ bơi", "ho boi", "ăn sáng", "an sang", "giặt", "giat", "xe đưa đón", "xe dua don"])) {
-    return {
-      reply:
-        `Dạ ${userName}, Mây An Nhiên hỗ trợ các dịch vụ chính:\n` +
-        "- Wifi miễn phí trong khuôn viên\n" +
-        "- Dịch vụ ăn uống tại phòng\n" +
-        "- Hỗ trợ dọn phòng và giặt ủi\n" +
-        "- Hỗ trợ đặt xe/đưa đón theo yêu cầu\n" +
-        "- Lễ tân hỗ trợ thông tin lưu trú\n\n" +
-        "Bạn cần dùng dịch vụ nào ạ?",
-      suggestedActions: ["Thực đơn hôm nay", "Đặt phòng", "Liên hệ lễ tân"],
+        `Dạ ${userName}, thời gian nhận/trả phòng tham khảo:\n` +
+        "- Nhận phòng: từ 14:00\n" +
+        "- Trả phòng: trước 12:00\n\n" +
+        "Nếu bạn cần nhận phòng sớm hoặc trả phòng muộn, lễ tân sẽ kiểm tra tình trạng phòng và hỗ trợ theo khả năng.",
+      suggestedActions: ["Đặt phòng", "Giá phòng", "Liên hệ lễ tân"],
     };
   }
 
@@ -198,32 +202,89 @@ function getChatbotFallback(message, userName = "quý khách") {
   if (hasAny(["thanh toán", "thanh toan", "qr", "chuyển khoản", "chuyen khoan", "tiền mặt", "tien mat", "invoice", "hóa đơn", "hoa don"])) {
     return {
       reply:
-        `Dạ ${userName}, khách sạn hỗ trợ thanh toán bằng tiền mặt, chuyển khoản/QR và xác nhận hóa đơn tại quầy lễ tân. ` +
-        "Nếu bạn đã đặt phòng, vui lòng gửi mã đặt phòng hoặc số phòng để tôi hỗ trợ kiểm tra trạng thái thanh toán.",
-      suggestedActions: ["Đặt phòng", "Liên hệ lễ tân", "Giá phòng"],
+        `Dạ ${userName}, với đặt phòng và dịch vụ trong hệ thống, bạn thanh toán bằng QR ngay ở bước xác nhận. ` +
+        "Sau khi chuyển khoản, bấm xác nhận để hệ thống lưu đơn và cập nhật trạng thái. Nếu cần kiểm tra hóa đơn, bạn liên hệ lễ tân hoặc xem lại lịch sử trong tài khoản.",
+      suggestedActions: ["Dịch vụ", "Đặt phòng", "Liên hệ lễ tân"],
     };
   }
 
-  if (hasAny(["checkin", "check-in", "check in", "checkout", "check-out", "check out", "nhận phòng", "nhan phong", "trả phòng", "tra phong"])) {
+  if (hasAny(["mệt", "met", "khó chịu", "kho chiu", "nóng", "nong", "lạnh", "lanh", "ồn", "ồn ào", "on ao"])) {
     return {
       reply:
-        `Dạ ${userName}, thời gian nhận/trả phòng tham khảo:\n` +
-        "- Nhận phòng: từ 14:00\n" +
-        "- Trả phòng: trước 12:00\n\n" +
-        "Nếu bạn cần nhận phòng sớm hoặc trả phòng muộn, lễ tân sẽ kiểm tra tình trạng phòng và hỗ trợ theo khả năng.",
-      suggestedActions: ["Đặt phòng", "Giá phòng", "Liên hệ lễ tân"],
+        `Dạ ${userName}, nghe có vẻ bạn đang cần hỗ trợ tại phòng. ` +
+        "Bạn gửi giúp số phòng và tình trạng cụ thể, ví dụ: Phòng 302 máy lạnh yếu hoặc phòng hơi ồn, tôi sẽ hướng dẫn liên hệ lễ tân xử lý nhanh.",
+      suggestedActions: ["Liên hệ lễ tân", "Dịch vụ", "Dọn phòng"],
     };
   }
 
-  if (hasAny(["đặt phòng", "dat phong", "booking", "book", "reservation"])) {
+  if (hasAny(["lỗi", "loi", "hỏng", "bẩn", "khiếu nại", "khieu nai", "dọn phòng", "don phong", "máy lạnh", "may lanh", "nước nóng", "nuoc nong"])) {
     return {
       reply:
-        `Dạ ${userName}, để hỗ trợ đặt phòng bạn cho tôi xin:\n` +
-        "- Loại phòng muốn đặt\n" +
-        "- Ngày nhận phòng và trả phòng\n" +
-        "- Số người lưu trú\n\n" +
-        "Bạn cũng có thể vào mục Đặt phòng để tạo đơn trực tiếp.",
-      suggestedActions: ["Giá phòng", "Dịch vụ", "Liên hệ lễ tân"],
+        `Dạ ${userName}, tôi đã hiểu là bạn cần hỗ trợ sự cố/dịch vụ phòng. ` +
+        "Bạn vui lòng gửi số phòng và mô tả ngắn vấn đề, ví dụ: Phòng 302 máy lạnh yếu. Tôi sẽ hướng dẫn liên hệ lễ tân xử lý nhanh.",
+      suggestedActions: ["Liên hệ lễ tân", "Dịch vụ", "Dọn phòng"],
+    };
+  }
+
+  if (hasAny(["khát", "khat", "uống", "uong", "đồ uống", "do uong", "nước", "nuoc", "cafe", "cà phê", "ca phe", "trà", "tra", "sinh tố", "sinh to"])) {
+    return buildServiceGuide("drink", "nếu bạn đang khát hoặc muốn gọi đồ uống, mình gợi ý các món sau:");
+  }
+
+  if (hasAny(["đói", "doi", "ăn", "an ", "đồ ăn", "do an", "món", "mon", "bữa", "bua", "cơm", "com", "phở", "bún", "bun", "bánh", "banh"])) {
+    return buildServiceGuide("food", "nếu bạn muốn ăn nhẹ hoặc gọi bữa chính, thực đơn đang có:");
+  }
+
+  if (hasAny(["giặt", "giat", "quần áo", "quan ao", "thuê xe", "thue xe", "xe máy", "xe may", "laundry", "motorbike"])) {
+    return buildServiceGuide("other", "với nhu cầu dịch vụ khác, khách sạn đang hỗ trợ:");
+  }
+
+  if (hasAny(["dịch vụ", "dich vu", "tiện ích", "tien ich", "menu", "thực đơn", "thuc don"])) {
+    return {
+      reply:
+        `Dạ ${userName}, trong mục Dịch vụ hiện có 3 nhóm chính:\n` +
+        "- Đồ ăn: bánh mì, phở bò, bún chả, cơm tấm, gỏi cuốn...\n" +
+        "- Đồ uống: cafe muối, nước suối, trà đào, trà mãng cầu, cà phê trứng, nước ép, sinh tố bơ...\n" +
+        "- Dịch vụ khác: giặt ủi, thuê xe máy.\n\n" +
+        `${serviceSteps}\n\n` +
+        "Bạn đang muốn ăn, uống hay dùng dịch vụ nào để tôi gợi ý nhanh hơn?",
+      suggestedActions: ["Tôi muốn ăn", "Tôi khát", "Giặt ủi"],
+    };
+  }
+
+  if (hasAny(["giá", "gia", "phòng", "phong", "bao nhiêu", "bao nhieu"])) {
+    const roomText = clean.match(/(?:phong|room)\s*(\d{2,4})/) || clean.match(/\b(\d{3})\b/);
+    if (roomText && !hasAny(["standard", "vip", "suite"])) {
+      return {
+        reply:
+          `Dạ ${userName}, nếu bạn cần hỗ trợ cho phòng ${roomText[1]}, bạn có thể nói rõ nhu cầu như gọi món, giặt ủi, dọn phòng hoặc báo sự cố. ` +
+          "Nếu muốn dùng dịch vụ, bạn vào mục Dịch vụ để thêm vào giỏ hàng và thanh toán QR.",
+        suggestedActions: ["Dịch vụ", "Liên hệ lễ tân", "Giá phòng"],
+      };
+    }
+    return {
+      reply:
+        `Dạ ${userName}, Mây An Nhiên hiện có các hạng phòng:\n` +
+        "- Phòng Standard: 550.000đ/đêm\n" +
+        "- Phòng VIP/Deluxe: 950.000đ/đêm\n" +
+        "- Suite Premium: 1.800.000đ/đêm\n\n" +
+        "Nếu muốn đặt, bạn vào mục Đặt phòng để chọn ngày và thanh toán nhé.",
+      suggestedActions: ["Đặt phòng", "Xem dịch vụ", "Liên hệ lễ tân"],
+    };
+  }
+
+  if (hasAny(["gọi", "goi", "đặt", "dat", "mua", "order", "lấy", "lay"])) {
+    return {
+      reply:
+        `Dạ ${userName}, để tránh đặt nhầm và để hệ thống lên đúng hóa đơn, mình chưa tự tạo đơn trong chat. ` +
+        "Bạn vào mục Dịch vụ, chọn món hoặc dịch vụ cần dùng, bấm Thêm vào giỏ hàng, nhập số phòng và thanh toán QR là đơn sẽ tự xuất hiện trong quản lý dịch vụ.",
+      suggestedActions: ["Dịch vụ", "Thực đơn", "Đồ uống"],
+    };
+  }
+
+  if (hasAny(["cảm ơn", "cam on", "thanks", "thank you"])) {
+    return {
+      reply: `Rất vui được hỗ trợ ${userName}. Khi cần hỏi phòng, dịch vụ, thanh toán hoặc chính sách hủy, bạn nhắn tôi nhé.`,
+      suggestedActions: ["Giá phòng", "Dịch vụ", "Đặt phòng"],
     };
   }
 
@@ -232,23 +293,14 @@ function getChatbotFallback(message, userName = "quý khách") {
       reply:
         `Dạ ${userName}, bạn có thể liên hệ lễ tân Mây An Nhiên để được hỗ trợ trực tiếp về đặt phòng, dịch vụ, thanh toán hoặc yêu cầu phát sinh. ` +
         "Nếu đang ở trong hệ thống, bạn gửi nội dung cần hỗ trợ, tôi sẽ hướng dẫn bước tiếp theo.",
-      suggestedActions: ["Đặt phòng", "Thực đơn hôm nay", "Dịch vụ"],
-    };
-  }
-
-  if (hasAny(["lỗi", "loi", "hỏng", "hong", "bẩn", "ban", "khiếu nại", "khieu nai", "dọn phòng", "don phong", "máy lạnh", "may lanh", "nước nóng", "nuoc nong"])) {
-    return {
-      reply:
-        `Dạ ${userName}, tôi đã hiểu là bạn cần hỗ trợ sự cố/dịch vụ phòng. ` +
-        "Bạn vui lòng gửi số phòng và mô tả ngắn vấn đề, ví dụ: Phòng 302 máy lạnh yếu. Tôi sẽ hướng dẫn ghi nhận yêu cầu cho lễ tân.",
-      suggestedActions: ["Liên hệ lễ tân", "Dịch vụ", "Thực đơn hôm nay"],
+      suggestedActions: ["Đặt phòng", "Dịch vụ", "Giá phòng"],
     };
   }
 
   if (hasAny(["xin chào", "chao", "hello", "hi"])) {
     return {
-      reply: `Xin chào ${userName}! Tôi là trợ lý AI của Mây An Nhiên. Bạn cần hỏi giá phòng, thực đơn hay hỗ trợ đặt phòng ạ?`,
-      suggestedActions: ["Giá phòng", "Thực đơn hôm nay", "Đặt phòng"],
+      reply: `Xin chào ${userName}! Tôi là trợ lý AI của Mây An Nhiên. Bạn cần hỏi giá phòng, đặt phòng, đồ ăn, đồ uống hay dịch vụ khác ạ?`,
+      suggestedActions: ["Giá phòng", "Dịch vụ", "Đặt phòng"],
     };
   }
 
@@ -262,7 +314,7 @@ function getChatbotFallback(message, userName = "quý khách") {
       reply:
         `Dạ ${userName}, tôi có thể hỗ trợ thông tin khách sạn Mây An Nhiên về giá phòng, đặt phòng, dịch vụ, thực đơn, thanh toán và chính sách hủy. ` +
         "Bạn nói rõ hơn nhu cầu của mình để tôi hỗ trợ chính xác nhé.",
-      suggestedActions: ["Giá phòng", "Thực đơn hôm nay", "Đặt phòng"],
+      suggestedActions: ["Giá phòng", "Dịch vụ", "Đặt phòng"],
     };
   }
 
