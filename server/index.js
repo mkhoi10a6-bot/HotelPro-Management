@@ -104,6 +104,65 @@ const SYSTEM_INSTRUCTION = `Role: You are the Hotel System Core Engine. Your pri
 
 Tone: Professional, precise, and system-oriented. Always identify as "Mây An Nhiên".`;
 
+function getChatbotFallback(message, userName = "quý khách") {
+  const text = String(message || "").toLowerCase();
+  const clean = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d");
+
+  const hasAny = (keywords) => keywords.some((keyword) => text.includes(keyword) || clean.includes(keyword));
+
+  if (hasAny(["giá", "gia", "phòng", "phong", "bao nhiêu", "bao nhieu"])) {
+    return {
+      reply:
+        `Dạ ${userName}, Mây An Nhiên hiện có các hạng phòng:\n` +
+        "- Phòng Standard: 550.000đ/đêm\n" +
+        "- Phòng VIP/Deluxe: 950.000đ/đêm\n" +
+        "- Suite Premium: 1.800.000đ/đêm\n\n" +
+        "Bạn muốn đặt loại phòng nào và ở mấy đêm ạ?",
+      suggestedActions: ["Đặt phòng Standard", "Đặt phòng VIP", "Xem dịch vụ"],
+    };
+  }
+
+  if (hasAny(["thực đơn", "thuc don", "menu", "ăn", "an ", "đói", "doi", "uống", "uong", "đồ ăn", "do an"])) {
+    return {
+      reply:
+        `Dạ ${userName}, thực đơn hôm nay của Mây An Nhiên gồm:\n` +
+        "- Phở bò: 65.000đ\n" +
+        "- Cơm tấm: 60.000đ\n" +
+        "- Bánh mì: 35.000đ\n" +
+        "- Bún chả: 65.000đ\n" +
+        "- Cafe muối: 35.000đ\n" +
+        "- Trà đào: 30.000đ\n" +
+        "- Nước suối: 10.000đ\n\n" +
+        "Bạn muốn gọi món nào? Nếu đang ở khách sạn, cho tôi xin số phòng để ghi nhận đơn nhé.",
+      suggestedActions: ["Gọi phở bò", "Gọi cafe muối", "Xem giá phòng"],
+    };
+  }
+
+  if (hasAny(["đặt phòng", "dat phong", "booking", "book", "reservation"])) {
+    return {
+      reply:
+        `Dạ ${userName}, để hỗ trợ đặt phòng bạn cho tôi xin:\n` +
+        "- Loại phòng muốn đặt\n" +
+        "- Ngày nhận phòng và trả phòng\n" +
+        "- Số người lưu trú\n\n" +
+        "Bạn cũng có thể vào mục Đặt phòng để tạo đơn trực tiếp.",
+      suggestedActions: ["Giá phòng", "Dịch vụ", "Liên hệ lễ tân"],
+    };
+  }
+
+  if (hasAny(["xin chào", "chao", "hello", "hi"])) {
+    return {
+      reply: `Xin chào ${userName}! Tôi là trợ lý AI của Mây An Nhiên. Bạn cần hỏi giá phòng, thực đơn hay hỗ trợ đặt phòng ạ?`,
+      suggestedActions: ["Giá phòng", "Thực đơn hôm nay", "Đặt phòng"],
+    };
+  }
+
+  return null;
+}
+
 // Local state management for immediate consistency
 let collectedRevenue = 0; // QR Payment
 let expectedRevenue = 0;  // Direct Payment
@@ -402,13 +461,22 @@ app.post("/api/chatbot/respond", authenticateToken, async (req, res) => {
     const { message } = req.body || {};
     if (!message) return res.json({ reply: "Mây An Nhiên xin chào! Quý khách cần hỗ trợ gì về phòng hay thực đơn ạ?", suggestedActions: [] });
 
-    if (!genAI) {
-      return res.json({ 
-        reply: "Tính năng AI hiện đang bảo trì do thiếu cấu hình API Key. Quý khách vui lòng liên hệ lễ tân.",
+    const userName = req.user?.name || "quý khách";
+    const deterministicReply = getChatbotFallback(message, userName);
+    if (deterministicReply) {
+      return res.json({
+        ...deterministicReply,
+        detectedLanguage: "vi",
       });
     }
 
-    const userName = req.user?.name || "quý khách";
+    if (!genAI) {
+      return res.json({ 
+        reply: "Tôi đã sẵn sàng hỗ trợ thông tin khách sạn. Bạn có thể hỏi về giá phòng, thực đơn hoặc đặt phòng nhé.",
+        detectedLanguage: "vi",
+        suggestedActions: ["Giá phòng", "Thực đơn hôm nay", "Đặt phòng"],
+      });
+    }
 
     const model = genAI.getGenerativeModel({ 
       model: "gemini-1.5-flash",
@@ -426,11 +494,12 @@ app.post("/api/chatbot/respond", authenticateToken, async (req, res) => {
       suggestedActions: [] 
     });
   } catch (error) {
-    console.error("Gemini API Error:", error);
+    console.error("Gemini API Error:", error.message || error);
+    const fallback = getChatbotFallback(req.body?.message, req.user?.name || "quý khách");
     return res.json({ 
-      reply: "Xin lỗi, tôi đang bận một chút, bạn cần hỗ trợ gì về phòng hay ăn uống không?",
+      reply: fallback?.reply || "Tôi đang gặp lỗi kết nối AI, nhưng vẫn có thể hỗ trợ nhanh về giá phòng, thực đơn hoặc đặt phòng.",
       detectedLanguage: "vi",
-      suggestedActions: ["Giá phòng", "Thực đơn hôm nay"]
+      suggestedActions: fallback?.suggestedActions || ["Giá phòng", "Thực đơn hôm nay", "Đặt phòng"]
     });
   }
 });
