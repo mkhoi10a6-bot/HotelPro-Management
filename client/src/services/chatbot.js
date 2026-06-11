@@ -1,9 +1,13 @@
 import { API_URL } from "./config";
 
 export async function chatbotRespond(payload) {
+  const token = localStorage.getItem("token");
   const res = await fetch(`${API_URL}/chatbot/respond`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(payload),
   });
 

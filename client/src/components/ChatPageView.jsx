@@ -1,30 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSelector } from "react-redux";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const SYSTEM_INSTRUCTION = `Role: You are the Hotel System Core Engine. Your primary responsibility is to act as a bridge between Guest requests and the Admin Management System.
-
-1. Data Context & State Management:
-- Room Inventory: Standard (550k), VIP/Deluxe (950k), Suite Premium (1.800k).
-- Services: Food (Phở Bò: 65k, Cơm Tấm: 60k, Bánh mì: 35k, Bún Chả: 65k); Drinks (Cafe muối: 35k, Trà đào: 30k, Nước suối: 10k).
-
-2. Transaction & Logic Rules (CRITICAL):
-- Automatic Revenue Calculation: Every time a guest books a room or orders a service, calculate: Total = (Room Price * Nights) + Sum(Service Prices).
-- Real-time Admin Update Trigger: When a guest confirms an order, you must generate a structured notification for the Admin including: Room Number, Customer Name, Specific Items, and Status: PENDING.
-- Financial Integrity: Distinguish between Collected Revenue (Paid) và Expected Revenue (Pending/Unpaid). Update these values immediately upon any transaction.
-
-3. Output Format Control:
-- For Admin Interface: Always provide updates in a clear, structured list. 
-  Example: [UPDATE] Room 302 - Order: 01 Phở Bò, 01 Cafe Muối - Total: 100k - Action: Notify Staff.
-- For System Stability: Never return raw Objects/JSON directly into the chat UI unless requested. Always wrap responses in clean Vietnamese prose to avoid "white screen" or "parsing errors" on the frontend.
-
-4. Operational Constraints:
-- Language: Professional, precise, and system-oriented Vietnamese.
-- If a guest asks "Đói quá" or "Ăn gì", suggest menu items with prices and ask for their Room Number to link the revenue.
-- Prevent unauthorized access: Only process orders if a Room Number is identified.
-- Safety: If the system cannot calculate a value, return "Đang cập nhật..." instead of an error.
-
-Tone: Professional, precise, and system-oriented. Always identify as "Mây An Nhiên".`;
+import { chatbotRespond } from "../services/chatbot";
 
 export default function ChatPageView() {
   const { user } = useSelector((s) => s.hotel);
@@ -73,19 +49,12 @@ export default function ChatPageView() {
     setLoading(true);
 
     try {
-      // Cấu hình Gemini AI trực tiếp từ Frontend
-      const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY || "YOUR_API_KEY_HERE");
-      const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
-        systemInstruction: SYSTEM_INSTRUCTION
-      });
-
-      const result = await model.generateContent(currentInput);
-      const responseText = result.response.text();
+      const data = await chatbotRespond({ message: currentInput });
 
       setMessages(prev => [...prev, { 
-        text: responseText, 
-        isUser: false 
+        text: data?.reply || "Mây An Nhiên chưa có phản hồi, bạn thử hỏi lại giúp tôi nhé.",
+        isUser: false,
+        actions: data?.suggestedActions || [],
       }]);
     } catch (e) {
       console.error("Gemini API Error:", e);
