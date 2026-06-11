@@ -117,6 +117,29 @@ function getChatbotFallback(message, userName = "quý khách") {
     .replace(/đ/g, "d");
 
   const hasAny = (keywords) => keywords.some((keyword) => text.includes(keyword) || clean.includes(keyword));
+  const menuItems = [
+    { names: ["phở bò", "pho bo"], label: "Phở bò", price: 65000 },
+    { names: ["cơm tấm", "com tam"], label: "Cơm tấm", price: 60000 },
+    { names: ["bánh mì", "banh mi"], label: "Bánh mì", price: 35000 },
+    { names: ["bún chả", "bun cha"], label: "Bún chả", price: 65000 },
+    { names: ["cafe muối", "cafe muoi", "cà phê muối", "ca phe muoi"], label: "Cafe muối", price: 35000 },
+    { names: ["trà đào", "tra dao"], label: "Trà đào", price: 30000 },
+    { names: ["nước suối", "nuoc suoi"], label: "Nước suối", price: 10000 },
+  ];
+  const matchedItem = menuItems.find((item) => item.names.some((name) => text.includes(name) || clean.includes(name)));
+  const roomMatch = clean.match(/(?:phong|room)\s*(\d{2,4})/) || clean.match(/\b(\d{3})\b/);
+
+  if (matchedItem && hasAny(["gọi", "goi", "đặt", "dat", "mua", "order", "lay", "lấy"])) {
+    const roomText = roomMatch?.[1]
+      ? `Tôi đã ghi nhận yêu cầu ${matchedItem.label} cho phòng ${roomMatch[1]}. Tổng tạm tính: ${matchedItem.price.toLocaleString("vi-VN")}đ.`
+      : `Dạ ${userName}, ${matchedItem.label} có giá ${matchedItem.price.toLocaleString("vi-VN")}đ. Bạn cho tôi xin số phòng để ghi nhận đơn nhé.`;
+    return {
+      reply:
+        `${roomText}\n\n` +
+        "Nếu cần thêm món, bạn có thể nhắn ví dụ: Gọi phở bò phòng 302.",
+      suggestedActions: ["Thực đơn hôm nay", "Gọi cafe muối", "Xem giá phòng"],
+    };
+  }
 
   if (hasAny(["giá", "gia", "phòng", "phong", "bao nhiêu", "bao nhieu"])) {
     return {
@@ -146,6 +169,52 @@ function getChatbotFallback(message, userName = "quý khách") {
     };
   }
 
+  if (hasAny(["dịch vụ", "dich vu", "tiện ích", "tien ich", "wifi", "hồ bơi", "ho boi", "ăn sáng", "an sang", "giặt", "giat", "xe đưa đón", "xe dua don"])) {
+    return {
+      reply:
+        `Dạ ${userName}, Mây An Nhiên hỗ trợ các dịch vụ chính:\n` +
+        "- Wifi miễn phí trong khuôn viên\n" +
+        "- Dịch vụ ăn uống tại phòng\n" +
+        "- Hỗ trợ dọn phòng và giặt ủi\n" +
+        "- Hỗ trợ đặt xe/đưa đón theo yêu cầu\n" +
+        "- Lễ tân hỗ trợ thông tin lưu trú\n\n" +
+        "Bạn cần dùng dịch vụ nào ạ?",
+      suggestedActions: ["Thực đơn hôm nay", "Đặt phòng", "Liên hệ lễ tân"],
+    };
+  }
+
+  if (hasAny(["hủy", "huy", "hoàn tiền", "hoan tien", "refund", "đổi lịch", "doi lich", "chính sách", "chinh sach"])) {
+    return {
+      reply:
+        `Dạ ${userName}, chính sách tham khảo của Mây An Nhiên:\n` +
+        "- Có thể hỗ trợ đổi lịch nếu báo trước ngày nhận phòng.\n" +
+        "- Hủy phòng/hoàn tiền phụ thuộc thời điểm hủy và trạng thái thanh toán.\n" +
+        "- Với đơn đã thanh toán, lễ tân sẽ kiểm tra và xác nhận lại trước khi xử lý.\n\n" +
+        "Bạn gửi mã đặt phòng hoặc email đặt phòng để tôi hướng dẫn tiếp nhé.",
+      suggestedActions: ["Liên hệ lễ tân", "Đặt phòng", "Giá phòng"],
+    };
+  }
+
+  if (hasAny(["thanh toán", "thanh toan", "qr", "chuyển khoản", "chuyen khoan", "tiền mặt", "tien mat", "invoice", "hóa đơn", "hoa don"])) {
+    return {
+      reply:
+        `Dạ ${userName}, khách sạn hỗ trợ thanh toán bằng tiền mặt, chuyển khoản/QR và xác nhận hóa đơn tại quầy lễ tân. ` +
+        "Nếu bạn đã đặt phòng, vui lòng gửi mã đặt phòng hoặc số phòng để tôi hỗ trợ kiểm tra trạng thái thanh toán.",
+      suggestedActions: ["Đặt phòng", "Liên hệ lễ tân", "Giá phòng"],
+    };
+  }
+
+  if (hasAny(["checkin", "check-in", "check in", "checkout", "check-out", "check out", "nhận phòng", "nhan phong", "trả phòng", "tra phong"])) {
+    return {
+      reply:
+        `Dạ ${userName}, thời gian nhận/trả phòng tham khảo:\n` +
+        "- Nhận phòng: từ 14:00\n" +
+        "- Trả phòng: trước 12:00\n\n" +
+        "Nếu bạn cần nhận phòng sớm hoặc trả phòng muộn, lễ tân sẽ kiểm tra tình trạng phòng và hỗ trợ theo khả năng.",
+      suggestedActions: ["Đặt phòng", "Giá phòng", "Liên hệ lễ tân"],
+    };
+  }
+
   if (hasAny(["đặt phòng", "dat phong", "booking", "book", "reservation"])) {
     return {
       reply:
@@ -158,9 +227,41 @@ function getChatbotFallback(message, userName = "quý khách") {
     };
   }
 
+  if (hasAny(["liên hệ", "lien he", "lễ tân", "le tan", "hotline", "địa chỉ", "dia chi", "ở đâu", "o dau"])) {
+    return {
+      reply:
+        `Dạ ${userName}, bạn có thể liên hệ lễ tân Mây An Nhiên để được hỗ trợ trực tiếp về đặt phòng, dịch vụ, thanh toán hoặc yêu cầu phát sinh. ` +
+        "Nếu đang ở trong hệ thống, bạn gửi nội dung cần hỗ trợ, tôi sẽ hướng dẫn bước tiếp theo.",
+      suggestedActions: ["Đặt phòng", "Thực đơn hôm nay", "Dịch vụ"],
+    };
+  }
+
+  if (hasAny(["lỗi", "loi", "hỏng", "hong", "bẩn", "ban", "khiếu nại", "khieu nai", "dọn phòng", "don phong", "máy lạnh", "may lanh", "nước nóng", "nuoc nong"])) {
+    return {
+      reply:
+        `Dạ ${userName}, tôi đã hiểu là bạn cần hỗ trợ sự cố/dịch vụ phòng. ` +
+        "Bạn vui lòng gửi số phòng và mô tả ngắn vấn đề, ví dụ: Phòng 302 máy lạnh yếu. Tôi sẽ hướng dẫn ghi nhận yêu cầu cho lễ tân.",
+      suggestedActions: ["Liên hệ lễ tân", "Dịch vụ", "Thực đơn hôm nay"],
+    };
+  }
+
   if (hasAny(["xin chào", "chao", "hello", "hi"])) {
     return {
       reply: `Xin chào ${userName}! Tôi là trợ lý AI của Mây An Nhiên. Bạn cần hỏi giá phòng, thực đơn hay hỗ trợ đặt phòng ạ?`,
+      suggestedActions: ["Giá phòng", "Thực đơn hôm nay", "Đặt phòng"],
+    };
+  }
+
+  const hotelRelated = hasAny([
+    "khách sạn", "khach san", "mây an nhiên", "may an nhien", "phòng", "phong",
+    "dịch vụ", "dich vu", "lưu trú", "luu tru", "đặt", "dat", "ăn", "an", "uống", "uong",
+  ]);
+
+  if (hotelRelated) {
+    return {
+      reply:
+        `Dạ ${userName}, tôi có thể hỗ trợ thông tin khách sạn Mây An Nhiên về giá phòng, đặt phòng, dịch vụ, thực đơn, thanh toán và chính sách hủy. ` +
+        "Bạn nói rõ hơn nhu cầu của mình để tôi hỗ trợ chính xác nhé.",
       suggestedActions: ["Giá phòng", "Thực đơn hôm nay", "Đặt phòng"],
     };
   }
@@ -502,7 +603,7 @@ app.post("/api/chatbot/respond", authenticateToken, async (req, res) => {
     console.error("Gemini API Error:", error.message || error);
     const fallback = getChatbotFallback(req.body?.message, req.user?.name || "quý khách");
     return res.json({ 
-      reply: fallback?.reply || "Tôi đang gặp lỗi kết nối AI, nhưng vẫn có thể hỗ trợ nhanh về giá phòng, thực đơn hoặc đặt phòng.",
+      reply: fallback?.reply || "Tôi là trợ lý của khách sạn Mây An Nhiên. Hiện tôi chỉ hỗ trợ các nội dung về phòng, giá phòng, dịch vụ, đặt phòng, thanh toán và chính sách hủy. Bạn cần hỗ trợ mục nào ạ?",
       detectedLanguage: "vi",
       suggestedActions: fallback?.suggestedActions || ["Giá phòng", "Thực đơn hôm nay", "Đặt phòng"]
     });
