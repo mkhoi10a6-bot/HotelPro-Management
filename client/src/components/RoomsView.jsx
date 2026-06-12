@@ -191,7 +191,7 @@ export default function RoomsView() {
     try {
       const token = localStorage.getItem("token");
 
-      // Tạo dữ liệu cập nhật, kèm metadata cho trường hợp "Đã đặt"
+      // Tạo dữ liệu cập nhật, kèm metadata khi admin chuyển phòng sang đang có khách.
       const payload = {
         status: newStatus,
         ...( (newStatus === "occupied" || newStatus === "reserved") && {
@@ -230,7 +230,7 @@ export default function RoomsView() {
       case "available":
         return "bg-green-100 text-green-800";
       case "occupied":
-        return "bg-red-100 text-red-800";
+        return "bg-sky-100 text-sky-800";
       case "reserved":
         return "bg-yellow-100 text-yellow-800";
       case "maintenance":
@@ -402,8 +402,8 @@ export default function RoomsView() {
                   className={`rounded-2xl border-0 px-3 py-2 text-xs font-bold outline-none ${getStatusColor(currentStatus)}`}
                 >
                   <option value="available">Trống</option>
-                  <option value="reserved" disabled>Đã đặt trước (Tự động từ khách)</option>
-                  <option value="occupied">Đã đặt (Tại chỗ)</option>
+                  <option value="reserved" disabled>Đã đặt trước (Online)</option>
+                  <option value="occupied">Đang có khách</option>
                   <option value="maintenance">Bảo trì</option>
                 </select>
               ) : (
@@ -411,13 +411,18 @@ export default function RoomsView() {
                   {currentStatus === "available"
                     ? "Trống"
                     : currentStatus === "occupied"
-                    ? "Đã đặt (Tại chỗ)"
+                    ? "Đang có khách"
                     : currentStatus === "reserved"
                     ? "Đã đặt trước (Online)"
                     : "Bảo trì"}
                 </span>
               )}
             </div>
+            {isAdmin && currentStatus === "reserved" && (
+              <p className="mt-2 text-xs font-bold text-amber-700">
+                Khách tới nhận phòng: chọn "Đang có khách".
+              </p>
+            )}
             {isAdmin && (
               <div className="mt-3 flex gap-2">
                 <button
