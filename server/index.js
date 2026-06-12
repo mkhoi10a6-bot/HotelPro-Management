@@ -435,6 +435,37 @@ function resolveBookingAmount({ totalAmount, total_amount, roomPrice, checkIn, c
   return Number.isFinite(price) && price > 0 && nights > 0 ? price * nights : 0;
 }
 
+function addDaysToDateString(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getVietnamDateTimeParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    hour: Number(values.hour),
+  };
+}
+
+function getAutoCheckoutCutoff() {
+  const vietnamNow = getVietnamDateTimeParts();
+  return {
+    ...vietnamNow,
+    dueDate: vietnamNow.hour >= 14 ? vietnamNow.date : addDaysToDateString(vietnamNow.date, -1),
+  };
+}
+
 async function getRoomPriceForBooking(roomId) {
   const room = await db.dbGetP(
     `SELECT price
@@ -472,20 +503,94 @@ function normalizeBookingRow(row) {
 }
 
 async function syncRoomStatusFromBookings(roomNumber) {
-  const today = new Date().toISOString().slice(0, 10);
+  const { date: today, hour } = getVietnamDateTimeParts();
+  const room = await db.dbGetP(
+    `SELECT number, status
+     FROM rooms
+     WHERE CAST(number AS TEXT) = CAST(? AS TEXT)
+        OR CAST(id AS TEXT) = CAST(? AS TEXT)
+     LIMIT 1`,
+    [String(roomNumber), String(roomNumber)]
+  );
+
+  if (room?.status === "maintenance") return;
+
   const active = await db.dbGetP(
     `SELECT id
      FROM bookings
      WHERE CAST(room_id AS TEXT) = CAST(? AS TEXT)
        AND LOWER(status) NOT IN ('cancelled', 'canceled', 'completed')
-       AND date(check_out) >= date(?)
+       AND date(check_in) <= date(?)
+       AND (
+         date(check_out) > date(?)
+         OR (date(check_out) = date(?) AND ? < 14)
+       )
+     LIMIT 1`,
+    [String(roomNumber), today, today, today, hour]
+  );
+
+  const upcoming = active ? null : await db.dbGetP(
+    `SELECT id
+     FROM bookings
+     WHERE CAST(room_id AS TEXT) = CAST(? AS TEXT)
+       AND LOWER(status) NOT IN ('cancelled', 'canceled', 'completed')
+       AND date(check_in) > date(?)
      LIMIT 1`,
     [String(roomNumber), today]
   );
-  const nextStatus = active ? "reserved" : "available";
-  await db.dbRunP("UPDATE rooms SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE number = ?", [nextStatus, String(roomNumber)]);
-  const roomIndex = rooms.findIndex(r => String(r.number) === String(roomNumber) || String(r.id) === String(roomNumber));
+
+  const nextStatus = active
+    ? (room?.status === "occupied" ? "occupied" : "reserved")
+    : (upcoming ? "reserved" : "available");
+  const targetRoomNumber = room?.number || String(roomNumber);
+
+  await db.dbRunP("UPDATE rooms SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE number = ?", [nextStatus, targetRoomNumber]);
+  const roomIndex = rooms.findIndex(r => String(r.number) === String(targetRoomNumber) || String(r.id) === String(roomNumber));
   if (roomIndex !== -1) rooms[roomIndex].status = nextStatus;
+}
+
+let lastAutoCheckoutAt = 0;
+let autoCheckoutPromise = null;
+const AUTO_CHECKOUT_THROTTLE_MS = 60 * 1000;
+
+async function completeDueCheckouts({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && now - lastAutoCheckoutAt < AUTO_CHECKOUT_THROTTLE_MS) return { updated: 0 };
+  if (autoCheckoutPromise) return autoCheckoutPromise;
+
+  autoCheckoutPromise = (async () => {
+    lastAutoCheckoutAt = now;
+    const { dueDate } = getAutoCheckoutCutoff();
+    const dueRows = await db.dbAllP(
+      `SELECT DISTINCT room_id
+       FROM bookings
+       WHERE LOWER(status) NOT IN ('cancelled', 'canceled', 'completed')
+         AND date(check_out) <= date(?)`,
+      [dueDate]
+    );
+
+    if (!dueRows.length) return { updated: 0, dueDate };
+
+    const result = await db.dbRunP(
+      `UPDATE bookings
+       SET status = 'completed', updated_at = CURRENT_TIMESTAMP
+       WHERE LOWER(status) NOT IN ('cancelled', 'canceled', 'completed')
+         AND date(check_out) <= date(?)`,
+      [dueDate]
+    );
+
+    for (const row of dueRows) {
+      await syncRoomStatusFromBookings(row.room_id);
+    }
+
+    await loadRoomsFromDatabase();
+    console.log(`Auto checkout completed ${result.changes || 0} booking(s) through ${dueDate} 14:00.`);
+    return { updated: result.changes || 0, dueDate };
+  })().finally(() => {
+    autoCheckoutPromise = null;
+  });
+
+  return autoCheckoutPromise;
 }
 
 async function getBookingById(id) {
@@ -588,6 +693,17 @@ app.use(express.json());
 app.use(morgan("dev"));
 app.use(["/api/login", "/api/auth/login", "/api/auth/register", "/api/auth/forgot-password", "/api/auth/reset-password", "/api/auth/google", "/signin.com"], authLimiter);
 app.use(["/api/public/contact"], publicWriteLimiter);
+app.use(async (req, res, next) => {
+  if (!req.path.startsWith("/api/")) return next();
+
+  try {
+    await completeDueCheckouts();
+  } catch (err) {
+    console.error("Auto checkout middleware error:", err.message);
+  }
+
+  next();
+});
 
 const clientDistPath = path.resolve(__dirname, "../client/dist");
 if (fs.existsSync(clientDistPath)) {
@@ -1528,4 +1644,14 @@ if (fs.existsSync(clientDistPath)) {
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Backend started at http://localhost:${PORT}`);
+  setTimeout(() => {
+    completeDueCheckouts({ force: true }).catch((err) => {
+      console.error("Initial auto checkout error:", err.message);
+    });
+  }, 3000);
+  setInterval(() => {
+    completeDueCheckouts({ force: true }).catch((err) => {
+      console.error("Scheduled auto checkout error:", err.message);
+    });
+  }, 5 * 60 * 1000);
 });
