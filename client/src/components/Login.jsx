@@ -279,6 +279,385 @@ export default function Login() {
     }
   };
 
+  const authSubmitHandler = mode === "forgot" ? handleForgotPassword : mode === "reset" ? handleResetPassword : handleSubmit;
+  const productNav = ["Khách sạn", "Vé xe", "Đưa đón sân bay", "Cho thuê xe", "Dịch vụ", "Ưu đãi"];
+  const searchTabs = ["Khách sạn", "Thuê xe", "Dịch vụ"];
+  const partners = ["Mây Local", "An Nhiên Car", "Sky Shuttle", "Bếp Nhà Mây", "City Tour"];
+
+  return (
+    <div className="min-h-screen bg-[#f5f8fb] text-slate-900">
+      <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/95 shadow-sm backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center justify-between gap-5">
+            <button type="button" onClick={() => setActivePanel("hotel")} className="flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-sky-500 text-xl font-black text-white shadow-lg shadow-sky-200">M</span>
+              <span className="text-3xl font-black tracking-tight text-slate-800">mayanhien</span>
+            </button>
+            <div className="hidden items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 sm:flex">
+              <span className="rounded bg-red-500 px-2 py-1 text-xs text-yellow-300">VN</span>
+              VND | VI
+            </div>
+          </div>
+
+          <nav className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-600 lg:justify-end">
+            <button type="button" onClick={() => setActivePanel("offers")} className="rounded-full px-4 py-2 hover:bg-sky-50 hover:text-sky-600">
+              Khuyến mãi
+            </button>
+            <button type="button" onClick={() => setActivePanel("contact")} className="rounded-full px-4 py-2 hover:bg-sky-50 hover:text-sky-600">
+              Hỗ trợ
+            </button>
+            <button type="button" onClick={() => switchMode("login")} className="rounded-full bg-sky-100 px-5 py-3 font-black text-sky-700 hover:bg-sky-200">
+              Đăng nhập
+            </button>
+            <button type="button" onClick={() => switchMode("register")} className="rounded-full bg-sky-500 px-5 py-3 font-black text-white shadow-lg shadow-sky-200 hover:bg-sky-600">
+              Đăng ký
+            </button>
+          </nav>
+        </div>
+
+        <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-5 pb-4 text-sm font-bold text-slate-500">
+          {productNav.map((item) => (
+            <button
+              type="button"
+              key={item}
+              onClick={() => setActivePanel(item === "Dịch vụ" ? "services" : item === "Ưu đãi" ? "offers" : "hotel")}
+              className="shrink-0 rounded-full px-4 py-2 transition hover:bg-slate-100 hover:text-slate-900"
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <main>
+        <section
+          className="relative overflow-hidden bg-cover bg-center"
+          style={{
+            backgroundImage:
+              "linear-gradient(120deg, rgba(2, 132, 199, 0.96), rgba(14, 165, 233, 0.9), rgba(3, 105, 161, 0.92)), url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=1800')",
+          }}
+        >
+          <div className="mx-auto grid max-w-7xl gap-8 px-5 pb-28 pt-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+            <div className="max-w-3xl text-white">
+              <p className="text-sm font-black uppercase tracking-[0.28em] text-sky-100">Mây An Nhiên Travel</p>
+              <h1 className="mt-5 text-4xl font-black leading-tight sm:text-5xl lg:text-6xl">
+                Đặt phòng, dịch vụ và chuyến đi nhanh trong một nơi.
+              </h1>
+              <p className="mt-5 max-w-2xl text-lg font-medium leading-8 text-sky-50">
+                Tìm phòng trống, chọn dịch vụ ăn uống, thuê xe hoặc liên hệ hỗ trợ. Giao diện mới tập trung vào thao tác đặt chỗ rõ ràng cho khách hàng.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <button type="button" onClick={() => setActivePanel("hotel")} className="rounded-full bg-white px-6 py-3 text-sm font-black text-sky-700 shadow-xl shadow-sky-900/10">
+                  Xem phòng
+                </button>
+                <button type="button" onClick={() => setActivePanel("services")} className="rounded-full border border-white/50 px-6 py-3 text-sm font-black text-white hover:bg-white/10">
+                  Xem dịch vụ
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-[28px] bg-white p-5 shadow-2xl shadow-sky-900/20">
+              <div className="flex flex-wrap gap-3 border-b border-slate-100 pb-4">
+                {searchTabs.map((tab, index) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActivePanel(tab === "Dịch vụ" ? "services" : "hotel")}
+                    className={`rounded-full px-4 py-2 text-sm font-black ${index === 0 ? "bg-sky-100 text-sky-700" : "bg-slate-50 text-slate-500 hover:bg-slate-100"}`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-5 grid gap-4">
+                <label className="block">
+                  <span className="text-sm font-black text-slate-700">Điểm đến hoặc tên khách sạn</span>
+                  <input className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" placeholder="Mây An Nhiên, Đà Lạt, Nha Trang..." />
+                </label>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-black text-slate-700">Ngày nhận phòng</span>
+                    <input type="date" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-black text-slate-700">Ngày trả phòng</span>
+                    <input type="date" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" />
+                  </label>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+                  <label className="block">
+                    <span className="text-sm font-black text-slate-700">Khách và phòng</span>
+                    <input className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" placeholder="2 người lớn, 1 phòng" />
+                  </label>
+                  <button type="button" onClick={() => focusAuthLogin()} className="rounded-xl bg-orange-500 px-8 py-3 text-sm font-black text-white shadow-lg shadow-orange-200 hover:bg-orange-600">
+                    Tìm kiếm
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#f5f8fb]" />
+        </section>
+
+        <section className="mx-auto -mt-16 max-w-7xl px-5">
+          <div className="rounded-[28px] bg-white p-5 shadow-xl shadow-slate-200">
+            <p className="mb-4 text-sm font-black uppercase tracking-[0.2em] text-slate-400">Đối tác & tiện ích</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {partners.map((partner) => (
+                <div key={partner} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-5 text-center text-sm font-black text-slate-600">
+                  {partner}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto grid max-w-7xl gap-8 px-5 py-12 lg:grid-cols-[1fr_420px]">
+          <div className="space-y-6">
+            <div className="grid gap-5 md:grid-cols-3">
+              {[
+                ["Khách sạn", "Kiểm tra phòng trống, xem giá theo từng hạng phòng.", "Xem phòng"],
+                ["Dịch vụ", "Đặt món ăn, đồ uống, giặt ủi và thuê xe từ giỏ hàng.", "Xem dịch vụ"],
+                ["Quản lý", "Admin theo dõi doanh thu, phòng, đơn đặt và trạng thái.", "Đăng nhập"],
+              ].map(([title, desc, action]) => (
+                <div key={title} className="rounded-[24px] border border-slate-100 bg-white p-6 shadow-sm">
+                  <h2 className="text-xl font-black text-slate-900">{title}</h2>
+                  <p className="mt-3 min-h-16 text-sm font-medium leading-6 text-slate-500">{desc}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (title === "Dịch vụ") setActivePanel("services");
+                      else if (title === "Khách sạn") setActivePanel("hotel");
+                      else focusAuthLogin();
+                    }}
+                    className="mt-5 rounded-full bg-sky-50 px-4 py-2 text-sm font-black text-sky-700 hover:bg-sky-100"
+                  >
+                    {action}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-[28px] bg-white p-6 shadow-sm">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-black uppercase tracking-[0.22em] text-sky-500">Ưu đãi hôm nay</p>
+                  <h2 className="mt-2 text-3xl font-black text-slate-900">Trải nghiệm nghỉ dưỡng dễ đặt hơn</h2>
+                </div>
+                <button type="button" onClick={() => setActivePanel("offers")} className="rounded-full bg-slate-900 px-5 py-3 text-sm font-black text-white">
+                  Xem ưu đãi
+                </button>
+              </div>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div className="overflow-hidden rounded-3xl bg-sky-100">
+                  <img className="h-48 w-full object-cover" src="https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=900" alt="Không gian khách sạn Mây An Nhiên" />
+                  <div className="p-5">
+                    <h3 className="text-lg font-black">Combo phòng + bữa sáng</h3>
+                    <p className="mt-2 text-sm font-medium text-slate-600">Phù hợp cho khách đi công tác hoặc nghỉ dưỡng ngắn ngày.</p>
+                  </div>
+                </div>
+                <div className="overflow-hidden rounded-3xl bg-orange-100">
+                  <img className="h-48 w-full object-cover" src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=900" alt="Dịch vụ ăn uống Mây An Nhiên" />
+                  <div className="p-5">
+                    <h3 className="text-lg font-black">Dịch vụ tại phòng</h3>
+                    <p className="mt-2 text-sm font-medium text-slate-600">Khách thêm món vào giỏ hàng và thanh toán QR nhanh chóng.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside className="rounded-[28px] bg-white p-6 shadow-xl shadow-slate-200 lg:sticky lg:top-32 lg:self-start">
+            <div className="mb-5 grid grid-cols-2 rounded-2xl bg-slate-100 p-1">
+              <button type="button" onClick={() => switchMode("login")} className={`rounded-xl px-4 py-3 text-sm font-black ${mode !== "register" ? "bg-white text-sky-700 shadow-sm" : "text-slate-500"}`}>
+                Đăng nhập
+              </button>
+              <button type="button" onClick={() => switchMode("register")} className={`rounded-xl px-4 py-3 text-sm font-black ${mode === "register" ? "bg-white text-sky-700 shadow-sm" : "text-slate-500"}`}>
+                Đăng ký
+              </button>
+            </div>
+
+            <form onSubmit={authSubmitHandler} className="space-y-4" autoComplete="off" noValidate>
+              {mode === "forgot" && <p className="rounded-2xl bg-sky-50 p-3 text-sm font-semibold text-sky-700">Nhập email để tạo mã đặt lại mật khẩu.</p>}
+              {mode === "reset" && <p className="rounded-2xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">Nhập mật khẩu mới để hoàn tất đặt lại.</p>}
+
+              <label className="block">
+                <span className="text-sm font-black text-slate-700">Email</span>
+                <input
+                  type="email"
+                  name="email"
+                  required
+                  placeholder="ten@gmail.com"
+                  autoComplete="email"
+                  value={credentials.email}
+                  onChange={(e) => setCredentials((prev) => ({ ...prev, email: e.target.value }))}
+                  className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                />
+              </label>
+
+              {mode === "register" && (
+                <>
+                  <label className="block">
+                    <span className="text-sm font-black text-slate-700">Họ tên</span>
+                    <input type="text" value={credentials.name} onChange={(e) => setCredentials((prev) => ({ ...prev, name: e.target.value }))} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" placeholder="Nguyễn Văn A" />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-black text-slate-700">Số điện thoại</span>
+                    <input type="tel" value={credentials.phone} onChange={(e) => setCredentials((prev) => ({ ...prev, phone: e.target.value }))} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" placeholder="09..." />
+                  </label>
+                </>
+              )}
+
+              {(mode === "login" || mode === "register") && (
+                <label className="block">
+                  <span className="text-sm font-black text-slate-700">Mật khẩu</span>
+                  <input
+                    type="password"
+                    name="password"
+                    required
+                    placeholder="Nhập mật khẩu"
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    value={credentials.password}
+                    onChange={(e) => setCredentials((prev) => ({ ...prev, password: e.target.value }))}
+                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                  />
+                </label>
+              )}
+
+              {mode === "reset" && (
+                <>
+                  <label className="block">
+                    <span className="text-sm font-black text-slate-700">Mã đặt lại</span>
+                    <textarea value={resetToken} onChange={(e) => setResetToken(e.target.value)} rows={3} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-xs outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-black text-slate-700">Mật khẩu mới</span>
+                    <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" />
+                  </label>
+                </>
+              )}
+
+              {error && <p className="rounded-2xl bg-rose-50 p-3 text-sm font-semibold text-rose-600">{error}</p>}
+              {success && <p className="rounded-2xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{success}</p>}
+
+              <button type="submit" disabled={loading} className="w-full rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-200 hover:bg-orange-600 disabled:opacity-60">
+                {loading ? "Đang xử lý..." : mode === "register" ? "Tạo tài khoản" : mode === "forgot" ? "Tạo mã đặt lại" : mode === "reset" ? "Đặt lại mật khẩu" : "Đăng nhập"}
+              </button>
+            </form>
+
+            {(mode === "login" || mode === "register") && (
+              <a href={`${API_URL}/auth/google`} className="mt-4 flex w-full items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm hover:bg-slate-50">
+                <span className="grid h-6 w-6 place-items-center rounded-full text-lg font-black text-blue-600">G</span>
+                Tiếp tục với Google
+              </a>
+            )}
+
+            <div className="mt-4 text-center text-sm font-semibold text-slate-500">
+              {mode === "login" ? (
+                <>
+                  Chưa có tài khoản?{" "}
+                  <button type="button" onClick={() => switchMode("register")} className="font-black text-sky-600">Đăng ký ngay</button>
+                  <br />
+                  <button type="button" onClick={() => switchMode("forgot")} className="mt-2 font-black text-slate-600">Quên mật khẩu?</button>
+                </>
+              ) : (
+                <>
+                  Đã có tài khoản?{" "}
+                  <button type="button" onClick={() => switchMode("login")} className="font-black text-sky-600">Đăng nhập</button>
+                </>
+              )}
+            </div>
+          </aside>
+        </section>
+      </main>
+
+      {activePanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-[28px] bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-sky-500">Mây An Nhiên</p>
+                <h2 className="mt-1 text-2xl font-black text-slate-900">
+                  {activePanel === "hotel" && "Khách sạn"}
+                  {activePanel === "offers" && "Ưu đãi"}
+                  {activePanel === "services" && "Dịch vụ"}
+                  {activePanel === "contact" && "Liên hệ"}
+                </h2>
+              </div>
+              <button type="button" onClick={closePanel} className="rounded-full bg-slate-100 px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-200">
+                Đóng
+              </button>
+            </div>
+
+            {activePanel === "hotel" && (
+              <div className="space-y-4">
+                {publicRoomsLoading && <p className="text-sm font-semibold text-sky-600">Đang tải danh sách phòng...</p>}
+                {publicRoomsError && <p className="text-sm font-semibold text-rose-600">{publicRoomsError}</p>}
+                {!publicRoomsLoading && !publicRoomsError && publicRooms.length === 0 && <p className="text-sm font-semibold text-slate-500">Chưa có phòng khả dụng.</p>}
+                <div className="grid gap-4 md:grid-cols-2">
+                  {publicRooms.map((room) => (
+                    <div key={room.id || room.number} className="overflow-hidden rounded-3xl border border-slate-100 bg-slate-50">
+                      <img className="h-44 w-full object-cover" src={room.image_url || ROOM_IMAGE_FALLBACK} alt={`Phòng ${room.number}`} />
+                      <div className="p-5">
+                        <h3 className="text-lg font-black">Phòng {room.number}</h3>
+                        <p className="text-sm font-semibold text-slate-500">{room.type}</p>
+                        <p className="mt-2 text-xl font-black text-sky-600">{Number(room.price || 0).toLocaleString("vi-VN")}đ/đêm</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activePanel === "offers" && (
+              <div className="grid gap-4 md:grid-cols-2">
+                {publicOffersLoading && <p className="text-sm font-semibold text-sky-600">Đang tải ưu đãi...</p>}
+                {publicOffersError && <p className="text-sm font-semibold text-rose-600">{publicOffersError}</p>}
+                {!publicOffersLoading && publicOffers.length === 0 && <p className="text-sm font-semibold text-slate-500">Chưa có ưu đãi.</p>}
+                {publicOffers.map((offer) => (
+                  <div key={offer.id || offer.title} className="rounded-3xl bg-sky-50 p-5">
+                    <h3 className="text-lg font-black">{offer.title}</h3>
+                    <p className="mt-2 text-sm font-semibold text-slate-600">{offer.description}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activePanel === "services" && (
+              <div>
+                {publicServicesLoading && <p className="text-sm font-semibold text-sky-600">Đang tải dịch vụ...</p>}
+                {publicServicesError && <p className="text-sm font-semibold text-rose-600">{publicServicesError}</p>}
+                <div className="grid gap-4 md:grid-cols-2">
+                  {publicServices.map((service) => (
+                    <div key={service.id || service.name} className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+                      <h3 className="text-lg font-black">{service.name}</h3>
+                      <p className="mt-1 text-sm font-semibold text-slate-500">{service.description}</p>
+                      <p className="mt-3 text-xl font-black text-sky-600">{Number(service.price || 0).toLocaleString("vi-VN")}đ</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activePanel === "contact" && (
+              <form onSubmit={submitContact} className="space-y-4">
+                <input value={contactForm.name} onChange={(e) => setContactForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" placeholder="Họ tên" />
+                <input value={contactForm.email} onChange={(e) => setContactForm((prev) => ({ ...prev, email: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" placeholder="Email" />
+                <textarea value={contactForm.message} onChange={(e) => setContactForm((prev) => ({ ...prev, message: e.target.value }))} className="min-h-32 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100" placeholder="Nội dung cần hỗ trợ" />
+                {contactStatus.type && <p className={`text-sm font-semibold ${contactStatus.type === "success" ? "text-emerald-600" : "text-rose-600"}`}>{contactStatus.text}</p>}
+                <button disabled={contactSending} className="rounded-2xl bg-sky-500 px-5 py-3 text-sm font-black text-white disabled:opacity-60">
+                  {contactSending ? "Đang gửi..." : "Gửi liên hệ"}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="relative overflow-hidden">
