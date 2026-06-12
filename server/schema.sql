@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS services (
     description TEXT,
     price REAL NOT NULL,
     category TEXT NOT NULL,
+    image_url TEXT,
     status TEXT DEFAULT 'active',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -108,6 +109,22 @@ CREATE TABLE IF NOT EXISTS service_usage (
     FOREIGN KEY (booking_id) REFERENCES bookings (id),
     FOREIGN KEY (service_id) REFERENCES services (id),
     FOREIGN KEY (invoice_id) REFERENCES invoices (id)
+);
+
+-- Service orders submitted from the customer service cart
+CREATE TABLE IF NOT EXISTS service_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_number TEXT NOT NULL,
+    customer_id INTEGER,
+    customer_name TEXT NOT NULL,
+    items_json TEXT NOT NULL,
+    total_amount REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    payment_method TEXT DEFAULT 'qr',
+    payment_date DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES users (id)
 );
 
 -- ===== HOUSEKEEPING MANAGEMENT =====
@@ -306,6 +323,9 @@ CREATE INDEX IF NOT EXISTS idx_invoices_booking_id ON invoices(booking_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
 
 CREATE INDEX IF NOT EXISTS idx_services_category ON services(category);
+CREATE INDEX IF NOT EXISTS idx_service_orders_customer_id ON service_orders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_service_orders_status ON service_orders(status);
+CREATE INDEX IF NOT EXISTS idx_service_orders_created_at ON service_orders(created_at);
 
 CREATE INDEX IF NOT EXISTS idx_cleaning_schedule_room_id ON cleaning_schedule(room_id);
 CREATE INDEX IF NOT EXISTS idx_cleaning_schedule_date ON cleaning_schedule(scheduled_date);

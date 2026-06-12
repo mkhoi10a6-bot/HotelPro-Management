@@ -36,6 +36,57 @@ const MENU_DATA = [
   },
 ];
 
+const CATEGORY_LABELS = {
+  food: "Thức ăn (Food)",
+  drinks: "Đồ uống (Drinks)",
+  other: "Dịch vụ khác (Other Services)",
+  laundry: "Dịch vụ khác (Other Services)",
+  transport: "Dịch vụ khác (Other Services)",
+  spa: "Dịch vụ khác (Other Services)",
+};
+
+const CATEGORY_ORDER = ["food", "drinks", "other"];
+
+const FALLBACK_IMAGE_BY_NAME = MENU_DATA
+  .flatMap((group) => group.items)
+  .reduce((acc, item) => ({ ...acc, [item.name.toLowerCase()]: item.image }), {});
+
+function normalizeCategory(category) {
+  const value = String(category || "other").toLowerCase();
+  if (value === "food" || value === "drinks") return value;
+  return "other";
+}
+
+function normalizeServiceItem(service) {
+  const name = service?.name || "Dịch vụ";
+  return {
+    id: service?.id || `${normalizeCategory(service?.category)}-${name}`,
+    name,
+    price: Number(service?.price) || 0,
+    desc: service?.description || service?.desc || "",
+    image: service?.image || service?.imageUrl || FALLBACK_IMAGE_BY_NAME[name.toLowerCase()] || "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&q=80&w=400",
+    category: normalizeCategory(service?.category),
+  };
+}
+
+function groupServices(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return MENU_DATA;
+
+  const groups = rows.reduce((acc, service) => {
+    const item = normalizeServiceItem(service);
+    acc[item.category] = acc[item.category] || [];
+    acc[item.category].push(item);
+    return acc;
+  }, {});
+
+  return CATEGORY_ORDER
+    .filter((category) => groups[category]?.length)
+    .map((category) => ({
+      category: CATEGORY_LABELS[category] || CATEGORY_LABELS.other,
+      items: groups[category],
+    }));
+}
+
 function AdminServiceView() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +116,8 @@ function AdminServiceView() {
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
       if (res.ok) {
-        setOrders(orders.map(o => o.id === id ? { ...o, status: "Completed" } : o));
+        const updatedOrder = await res.json().catch(() => null);
+        setOrders(orders.map(o => o.id === id ? (updatedOrder || { ...o, status: "Completed" }) : o));
       }
     } catch (e) {
       alert("Lỗi khi cập nhật trạng thái");
@@ -102,12 +154,12 @@ function AdminServiceView() {
                   <td className="px-6 py-4 font-bold text-sky-600">{order.roomNumber}</td>
                   <td className="px-6 py-4 text-slate-700">{order.customerName}</td>
                   <td className="px-6 py-4">
-                    {order.items.map(i => `${i.name} (x${i.quantity})`).join(", ")}
+                    {(Array.isArray(order.items) ? order.items : []).map(i => `${i.name} (x${i.quantity})`).join(", ")}
                   </td>
                   <td className="px-6 py-4 font-bold text-slate-900">{order.totalAmount.toLocaleString("vi-VN")}đ</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${order.status === 'Completed' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                      <div className={`w-2 h-2 rounded-full ${order.status === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                       <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${order.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
                         {order.status === 'Completed' ? 'Đã phục vụ' : 'Đang phục vụ'}
                       </span>
@@ -177,6 +229,8 @@ function CustomerServiceView() {
   const { user } = useSelector((s) => s.hotel);
   const dispatch = useDispatch();
 
+  const [serviceGroups, setServiceGroups] = useState(MENU_DATA);
+  const [servicesLoading, setServicesLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState([]);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -184,8 +238,32 @@ function CustomerServiceView() {
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  useEffect(() => {
+    let ignore = false;
+
+    const fetchServices = async () => {
+      try {
+        const res = await fetch(`${API_URL}/services`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const data = await res.json();
+        if (!ignore) setServiceGroups(groupServices(data));
+      } catch (e) {
+        console.error("Lỗi tải danh sách dịch vụ:", e);
+        if (!ignore) setServiceGroups(MENU_DATA);
+      } finally {
+        if (!ignore) setServicesLoading(false);
+      }
+    };
+
+    fetchServices();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   const addItem = (item, note) => {
-    setSelectedItems((prev) => [...prev, { ...item, note, quantity: 1, cartId: Date.now() }]);
+    setSelectedItems((prev) => [...prev, { ...item, note, quantity: 1, cartId: `${item.id}-${Date.now()}-${Math.random()}` }]);
     setPaymentSuccess(false);
   };
 
@@ -193,7 +271,10 @@ function CustomerServiceView() {
     setSelectedItems((prev) => prev.filter((i) => i.cartId !== cartId));
   };
 
-  const totalAmount = selectedItems.reduce((sum, item) => sum + item.price, 0);
+  const totalAmount = selectedItems.reduce(
+    (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
+    0
+  );
 
   const handleCheckout = () => {
     /* --- Pre-flight Validation --- */
@@ -238,6 +319,7 @@ function CustomerServiceView() {
       if (res.status === 200 || res.status === 201) {
         /* --- Success Handler: Silent UI wipe --- */
         setSelectedItems([]);
+        setPaymentSuccess(true);
         setShowSuccessModal(false);
         setRoomNumber("");
         // Trigger silent re-fetch for admin stats
@@ -250,7 +332,7 @@ function CustomerServiceView() {
       console.error(`[${originContext}] System Exception:`, e.message);
       // Silent Fallback
       const queue = JSON.parse(localStorage.getItem("offline_services") || "[]");
-      localStorage.setItem("offline_services", JSON.stringify([...queue, { roomNumber, items: selectedItems, ts: Date.now() }]));
+      localStorage.setItem("offline_services", JSON.stringify([...queue, { roomNumber, items: selectedItems, totalAmount, ts: Date.now() }]));
     } finally {
       setLoading(false);
       /* --- Context-Aware Redirect to My Services --- */
@@ -273,7 +355,10 @@ function CustomerServiceView() {
       )}
 
       <div className="space-y-10">
-        {MENU_DATA.map((group) => (
+        {servicesLoading && (
+          <div className="text-center py-8 text-slate-400 font-semibold">Đang tải danh sách dịch vụ...</div>
+        )}
+        {serviceGroups.map((group) => (
           <div key={group.category}>
             <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-3">
               <span className="w-1 h-6 bg-sky-600 rounded-full"></span>

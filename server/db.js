@@ -21,6 +21,24 @@ const DEFAULT_ROOMS = [
   ['302', 'Suite', 1800000, 'available', 2],
 ];
 
+const DEFAULT_SERVICES = [
+  ['Bánh mì', 'Bánh mì đặc biệt đầy đủ topping', 35000, 'food', 'active', 'https://cdn2.fptshop.com.vn/unsafe/1920x0/filters:format(webp):quality(75)/banh_mi_ha_noi_0_26350bb14e.jpg'],
+  ['Phở Bò', 'Phở bò truyền thống hương vị đậm đà', 65000, 'food', 'active', 'https://i-giadinh.vnecdn.net/2025/11/17/Pho-bo-Ha-Noi-7-vnexpress-1763-7388-9585-1763372391.jpg'],
+  ['Bún Chả Hà Nội', 'Bún chả Hà Nội chuẩn vị, thơm ngon', 65000, 'food', 'active', 'https://i-giadinh.vnecdn.net/2023/04/16/Buoc-11-Thanh-pham-11-7068-1681636164.jpg'],
+  ['Gỏi Cuốn Tôm Thịt', 'Gỏi cuốn tươi mát (3 cuốn)', 45000, 'food', 'active', 'https://i-giadinh.vnecdn.net/2025/12/09/Goi-cuon-tom-thit-7-vnexpress-2800-5342-1765272698.jpg'],
+  ['Cơm Tấm Sườn Bì Chả', 'Cơm tấm sườn bì chả đặc trưng Sài Gòn', 60000, 'food', 'active', 'https://i-giadinh.vnecdn.net/2024/03/07/7Honthinthnhphm1-1709800144-8583-1709800424.jpg'],
+  ['Bánh Mì Chảo Đặc Biệt', 'Bánh mì chảo nóng hổi với trứng và pate', 50000, 'food', 'active', 'https://www.huongnghiepaau.com/wp-content/uploads/2024/01/banh-mi-chao-full-topping.jpg'],
+  ['Cafe muối', 'Cà phê muối đặc sản thơm béo', 40000, 'drinks', 'active', 'https://cubes-asia.com/storage/blogs/2024-12/cach-lam-ca-phe-muoi-nguyen-lieu-cong-thuc-lam.jpg'],
+  ['Nước suối', 'Nước khoáng đóng chai tinh khiết', 15000, 'drinks', 'active', 'https://truongphatdat.com/wp-content/uploads/2019/12/Dasani-500ml.jpg'],
+  ['Trà đào', 'Trà đào miếng thơm mát giải nhiệt', 30000, 'drinks', 'active', 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&q=80&w=200'],
+  ['Trà Mãng Cầu Xiêm', 'Trà mãng cầu xiêm thanh mát (Hot trend)', 40000, 'drinks', 'active', 'https://blog.aeoneshop.com/wp-content/uploads/2025/11/cach-lam-tra-mang-cau-thumbnail.jpeg'],
+  ['Cà Phê Trứng Hà Nội', 'Cà phê trứng béo ngậy chuẩn vị Hà Nội', 50000, 'drinks', 'active', 'https://cooponline.vn/tin-tuc/wp-content/uploads/2025/10/cach-lam-ca-phe-trung-nong-dam-da-beo-min-chuan-huong-viet-3.png'],
+  ['Nước Ép Trái Cây Tươi', 'Nước ép tươi theo mùa (Thơm/Dưa hấu)', 30000, 'drinks', 'active', 'https://bizweb.dktcdn.net/100/405/121/products/pineapple-watermelon-juice-jpeg.jpg?v=1634158438353'],
+  ['Sinh Tố Bơ Sáp', 'Sinh tố bơ sáp thơm ngon, bổ dưỡng', 40000, 'drinks', 'active', 'https://beptruong.edu.vn/wp-content/uploads/2021/03/sinh-to-bo-sau-rieng.jpg'],
+  ['Giặt ủi (Laundry)', 'Dịch vụ giặt sấy trong ngày', 50000, 'other', 'active', 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&q=80&w=200'],
+  ['Thuê xe máy (Motorbike rental)', 'Xe máy đời mới, đầy đủ xăng', 150000, 'other', 'active', 'https://motogo.vn/wp-content/uploads/2020/07/motogo-thue-xe-may-ha-giang-5.jpg'],
+];
+
 // Promisify db.exec, db.all, db.get, db.run for easier async/await usage
 function dbExecP(sql) {
   return new Promise((resolve, reject) => {
@@ -132,6 +150,13 @@ const db = new sqlite3.Database(dbPath, (err) => {
           console.log("Added missing 'image_url' column to rooms table.");
         }
 
+        const serviceColumns = await dbAllP("PRAGMA table_info(services)");
+        const serviceColumnNames = serviceColumns.map(c => c.name);
+        if (!serviceColumnNames.includes('image_url')) {
+          await dbRunP("ALTER TABLE services ADD COLUMN image_url TEXT");
+          console.log("Added missing 'image_url' column to services table.");
+        }
+
         // Step 3: Seed database with sample data
         await seedDatabase();
 
@@ -175,6 +200,7 @@ async function seedDatabase() {
 
   await cleanupDemoUsers();
   await ensureDefaultRooms();
+  await normalizeLegacyBookingRoomIds();
 
   // Ensure the fixed admin account still exists and is synced
   const adminRow = await dbGetP("SELECT * FROM users WHERE email = ?", [ADMIN_EMAIL]);
@@ -211,30 +237,7 @@ async function seedDatabase() {
     console.log('Default promotions seeded.');
   }
 
-  // Seed services
-  const serviceCount = await dbGetP("SELECT COUNT(*) as c FROM services");
-  if (serviceCount.c === 0) {
-      const svc = [
-        ['Lễ tân 24/7', 'Check-in linh hoạt, hỗ trợ hành lý và gọi taxi.', 0, 'other', 'active'],
-        ['Trà mãng cầu xiêm', 'Thức uống giải nhiệt vị chua ngọt thanh mát.', 55000, 'drinks', 'active'],
-        ['Cafe muối', 'Hương vị cà phê đậm đà kết hợp lớp kem mặn béo ngậy.', 65000, 'drinks', 'active'],
-        ['Trà dâu tươi', 'Sự kết hợp giữa trà tươi và dâu tây tự nhiên.', 60000, 'drinks', 'active'],
-        ['Bánh mì đặc biệt', 'Bánh mì nóng với pate, chả, thịt nguội và rau ăn kèm.', 75000, 'food', 'active'],
-        ['Mì tôm trứng', 'Mì gói phục vụ tại phòng kèm trứng, rau và gia vị.', 85000, 'food', 'active'],
-        ['Nhà hàng & bar', 'Suất ăn hoặc đồ uống tiêu chuẩn phục vụ tại nhà hàng hoặc tại phòng.', 180000, 'food', 'active'],
-        ['Spa & gym', 'Gói massage thư giãn hoặc sử dụng tiện ích chăm sóc sức khỏe.', 350000, 'spa', 'active'],
-        ['Hội nghị', 'Phòng họp nhỏ theo buổi, gồm thiết bị trình chiếu cơ bản.', 1500000, 'other', 'active'],
-        ['Giặt ủi', 'Dịch vụ giặt ủi tiêu chuẩn, thu và giao trong ngày.', 120000, 'laundry', 'active'],
-        ['Bãi đỗ xe', 'Chỗ đỗ ô tô/xe máy qua đêm trong khu vực khách sạn.', 100000, 'transport', 'active'],
-      ];
-    for (const r of svc) {
-      await dbRunP(
-          "INSERT INTO services (name, description, price, category, status) VALUES (?, ?, ?, ?, ?)",
-          r
-        );
-    }
-    console.log('Default services for landing seeded.');
-  }
+  await ensureDefaultServices();
 }
 
 async function ensureDefaultRooms() {
@@ -250,6 +253,74 @@ async function ensureDefaultRooms() {
 
   if (insertedCount > 0) {
     console.log(`Default room sync added ${insertedCount} missing room(s).`);
+  }
+}
+
+async function ensureDefaultServices() {
+  let changedCount = 0;
+  const defaultNames = DEFAULT_SERVICES.map(([name]) => name);
+
+  for (const service of DEFAULT_SERVICES) {
+    const [name, description, price, category, status, imageUrl] = service;
+    const existing = await dbGetP("SELECT id FROM services WHERE name = ? LIMIT 1", [name]);
+
+    if (existing) {
+      const result = await dbRunP(
+        `UPDATE services
+         SET description = ?, price = ?, category = ?, status = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [description, price, category, status, imageUrl, existing.id]
+      );
+      changedCount += result.changes || 0;
+    } else {
+      const result = await dbRunP(
+        "INSERT INTO services (name, description, price, category, status, image_url) VALUES (?, ?, ?, ?, ?, ?)",
+        service
+      );
+      changedCount += result.changes || 0;
+    }
+  }
+
+  if (defaultNames.length > 0) {
+    const placeholders = defaultNames.map(() => "?").join(", ");
+    const result = await dbRunP(
+      `UPDATE services
+       SET status = 'inactive', updated_at = CURRENT_TIMESTAMP
+       WHERE name NOT IN (${placeholders})`,
+      defaultNames
+    );
+    changedCount += result.changes || 0;
+  }
+
+  if (changedCount > 0) {
+    console.log(`Default service catalog synced (${changedCount} row update/insert operation(s)).`);
+  }
+}
+
+async function normalizeLegacyBookingRoomIds() {
+  const result = await dbRunP(
+    `UPDATE bookings
+     SET room_id = (
+       SELECT rooms.number
+       FROM rooms
+       WHERE CAST(rooms.id AS TEXT) = CAST(bookings.room_id AS TEXT)
+       LIMIT 1
+     ),
+     updated_at = CURRENT_TIMESTAMP
+     WHERE EXISTS (
+       SELECT 1
+       FROM rooms
+       WHERE CAST(rooms.id AS TEXT) = CAST(bookings.room_id AS TEXT)
+     )
+     AND NOT EXISTS (
+       SELECT 1
+       FROM rooms
+       WHERE CAST(rooms.number AS TEXT) = CAST(bookings.room_id AS TEXT)
+     )`
+  );
+
+  if (result.changes > 0) {
+    console.log(`Normalized ${result.changes} legacy booking room id(s) to room numbers.`);
   }
 }
 
@@ -417,7 +488,17 @@ function getPublicPromotions(callback) {
 /** Active billable services for public landing (name + description). */
 function getPublicServicesLanding(callback) {
   db.all(
-    "SELECT id, name, description, price, category FROM services WHERE status = 'active' ORDER BY category, name LIMIT 80",
+    `SELECT id, name, description, price, category, image_url AS image
+     FROM services
+     WHERE status = 'active'
+     ORDER BY
+       CASE category
+         WHEN 'food' THEN 1
+         WHEN 'drinks' THEN 2
+         ELSE 3
+       END,
+       id ASC
+     LIMIT 80`,
     [],
     callback
   );

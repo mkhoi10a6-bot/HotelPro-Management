@@ -338,11 +338,8 @@ function getChatbotFallback(message, userName = "Anh/Chị") {
   return null;
 }
 
-// Local state management for immediate consistency
-let collectedRevenue = 0; // QR Payment
-let expectedRevenue = 0;  // Direct Payment
+// Local cache mirrors SQLite for quick UI responses. SQLite remains the source of truth.
 let bookings = [];
-let serviceOrders = [];
 let rooms = [
   { id: 101, number: "101", type: "Standard", price: 550000, status: "available", capacity: 1 },
   { id: 102, number: "102", type: "Standard", price: 550000, status: "available", capacity: 1 },
@@ -418,6 +415,41 @@ function normalizeStatus(status) {
   return String(status || "pending").trim().toLowerCase();
 }
 
+function bookingStatusIsCancelled(status) {
+  return ["cancelled", "canceled"].includes(normalizeStatus(status));
+}
+
+function getRoomLookupKeys(roomOrBooking) {
+  return [
+    roomOrBooking?.number,
+    roomOrBooking?.roomNumber,
+    roomOrBooking?.room_id,
+    roomOrBooking?.roomId,
+    roomOrBooking?.dbId,
+    roomOrBooking?.roomDbId,
+    roomOrBooking?.id,
+  ]
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .map((value) => String(value));
+}
+
+async function findRoomByIdentifier(identifier) {
+  if (identifier === undefined || identifier === null || identifier === "") return null;
+  return db.dbGetP(
+    `SELECT id, number, type, price, status, capacity, floor, amenities, image_url
+     FROM rooms
+     WHERE CAST(number AS TEXT) = CAST(? AS TEXT)
+        OR CAST(id AS TEXT) = CAST(? AS TEXT)
+     LIMIT 1`,
+    [String(identifier), String(identifier)]
+  );
+}
+
+function roomMatchesBooking(room, booking) {
+  const roomKeys = new Set(getRoomLookupKeys(room));
+  return getRoomLookupKeys(booking).some((key) => roomKeys.has(key));
+}
+
 function calculateNights(checkIn, checkOut) {
   const start = new Date(checkIn);
   const end = new Date(checkOut);
@@ -467,14 +499,7 @@ function getAutoCheckoutCutoff() {
 }
 
 async function getRoomPriceForBooking(roomId) {
-  const room = await db.dbGetP(
-    `SELECT price
-     FROM rooms
-     WHERE CAST(number AS TEXT) = CAST(? AS TEXT)
-        OR CAST(id AS TEXT) = CAST(? AS TEXT)
-     LIMIT 1`,
-    [String(roomId), String(roomId)]
-  );
+  const room = await findRoomByIdentifier(roomId);
   return Number(room?.price) || 0;
 }
 
@@ -491,6 +516,7 @@ function normalizeBookingRow(row) {
     ...row,
     roomId: row.room_id,
     roomNumber: row.roomNumber || row.room_number || row.room_id,
+    roomDbId: row.roomDbId || row.room_db_id || null,
     customerId: row.customer_id,
     customerName: row.customerName || row.customer_name || "Khách hàng",
     checkIn: row.check_in,
@@ -504,21 +530,16 @@ function normalizeBookingRow(row) {
 
 async function syncRoomStatusFromBookings(roomNumber) {
   const { date: today, hour } = getVietnamDateTimeParts();
-  const room = await db.dbGetP(
-    `SELECT number, status
-     FROM rooms
-     WHERE CAST(number AS TEXT) = CAST(? AS TEXT)
-        OR CAST(id AS TEXT) = CAST(? AS TEXT)
-     LIMIT 1`,
-    [String(roomNumber), String(roomNumber)]
-  );
+  const room = await findRoomByIdentifier(roomNumber);
 
   if (room?.status === "maintenance") return;
+  const targetRoomNumber = room?.number || String(roomNumber);
+  const roomDbId = room?.id || targetRoomNumber;
 
   const active = await db.dbGetP(
     `SELECT id
      FROM bookings
-     WHERE CAST(room_id AS TEXT) = CAST(? AS TEXT)
+     WHERE CAST(room_id AS TEXT) IN (CAST(? AS TEXT), CAST(? AS TEXT))
        AND LOWER(status) NOT IN ('cancelled', 'canceled', 'completed')
        AND date(check_in) <= date(?)
        AND (
@@ -526,24 +547,22 @@ async function syncRoomStatusFromBookings(roomNumber) {
          OR (date(check_out) = date(?) AND ? < 14)
        )
      LIMIT 1`,
-    [String(roomNumber), today, today, today, hour]
+    [String(targetRoomNumber), String(roomDbId), today, today, today, hour]
   );
 
   const upcoming = active ? null : await db.dbGetP(
     `SELECT id
      FROM bookings
-     WHERE CAST(room_id AS TEXT) = CAST(? AS TEXT)
+     WHERE CAST(room_id AS TEXT) IN (CAST(? AS TEXT), CAST(? AS TEXT))
        AND LOWER(status) NOT IN ('cancelled', 'canceled', 'completed')
        AND date(check_in) > date(?)
      LIMIT 1`,
-    [String(roomNumber), today]
+    [String(targetRoomNumber), String(roomDbId), today]
   );
 
   const nextStatus = active
     ? (room?.status === "occupied" ? "occupied" : "reserved")
     : (upcoming ? "reserved" : "available");
-  const targetRoomNumber = room?.number || String(roomNumber);
-
   await db.dbRunP("UPDATE rooms SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE number = ?", [nextStatus, targetRoomNumber]);
   const roomIndex = rooms.findIndex(r => String(r.number) === String(targetRoomNumber) || String(r.id) === String(roomNumber));
   if (roomIndex !== -1) rooms[roomIndex].status = nextStatus;
@@ -583,6 +602,8 @@ async function completeDueCheckouts({ force = false } = {}) {
       await syncRoomStatusFromBookings(row.room_id);
     }
 
+    await completeDueCheckouts({ force: true });
+    await syncRoomStatusFromBookings(finalRoomNumber);
     await loadRoomsFromDatabase();
     console.log(`Auto checkout completed ${result.changes || 0} booking(s) through ${dueDate} 14:00.`);
     return { updated: result.changes || 0, dueDate };
@@ -595,7 +616,7 @@ async function completeDueCheckouts({ force = false } = {}) {
 
 async function getBookingById(id) {
   const row = await db.dbGetP(
-    `SELECT b.*, r.number AS roomNumber, r.price AS roomPrice, r.type AS roomType, u.name AS customerName, u.phone, u.email
+    `SELECT b.*, r.id AS roomDbId, r.number AS roomNumber, r.price AS roomPrice, r.type AS roomType, u.name AS customerName, u.phone, u.email
      FROM bookings b
      LEFT JOIN rooms r ON CAST(r.number AS TEXT) = CAST(b.room_id AS TEXT)
        OR CAST(r.id AS TEXT) = CAST(b.room_id AS TEXT)
@@ -632,7 +653,7 @@ async function listBookings({ isAdmin, userId, status, dateFrom, dateTo } = {}) 
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const rows = await db.dbAllP(
-    `SELECT b.*, r.number AS roomNumber, r.price AS roomPrice, r.type AS roomType, u.name AS customerName, u.phone, u.email
+    `SELECT b.*, r.id AS roomDbId, r.number AS roomNumber, r.price AS roomPrice, r.type AS roomType, u.name AS customerName, u.phone, u.email
      FROM bookings b
      LEFT JOIN rooms r ON CAST(r.number AS TEXT) = CAST(b.room_id AS TEXT)
        OR CAST(r.id AS TEXT) = CAST(b.room_id AS TEXT)
@@ -642,6 +663,79 @@ async function listBookings({ isAdmin, userId, status, dateFrom, dateTo } = {}) 
     params
   );
   return (rows || []).map(normalizeBookingRow);
+}
+
+function normalizeServiceOrderStatus(status) {
+  const value = String(status || "pending").trim().toLowerCase();
+  return value === "completed" || value === "served" ? "Completed" : "Pending";
+}
+
+function parseServiceItems(itemsJson) {
+  if (Array.isArray(itemsJson)) return itemsJson;
+  try {
+    const parsed = JSON.parse(itemsJson || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeServiceOrderItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      const quantity = Math.max(1, Number(item?.quantity) || 1);
+      const price = Number(item?.price) || 0;
+      return {
+        id: item?.id ?? null,
+        name: String(item?.name || "").trim(),
+        price,
+        quantity,
+        note: String(item?.note || "").trim(),
+      };
+    })
+    .filter((item) => item.name && item.price >= 0);
+}
+
+function mapServiceOrderRow(row) {
+  return {
+    id: row.id,
+    roomNumber: row.room_number,
+    customerId: row.customer_id,
+    customerName: row.customer_name || "Khách hàng",
+    items: parseServiceItems(row.items_json),
+    totalAmount: Number(row.total_amount) || 0,
+    status: normalizeServiceOrderStatus(row.status),
+    paymentMethod: row.payment_method || "qr",
+    paymentDate: row.payment_date || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function getServiceOrderById(id) {
+  const row = await db.dbGetP("SELECT * FROM service_orders WHERE id = ?", [id]);
+  return row ? mapServiceOrderRow(row) : null;
+}
+
+async function listServiceOrders({ isAdmin, userId, userName } = {}) {
+  const params = [];
+  const where = [];
+
+  if (!isAdmin) {
+    where.push("(customer_id = ? OR customer_name = ?)");
+    params.push(userId, userName || "");
+  }
+
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const rows = await db.dbAllP(
+    `SELECT *
+     FROM service_orders
+     ${whereSql}
+     ORDER BY datetime(created_at) DESC, id DESC`,
+    params
+  );
+  return (rows || []).map(mapServiceOrderRow);
 }
 
 const allowedOrigins = new Set([
@@ -1158,50 +1252,76 @@ app.post("/api/auth/change-password", authenticateToken, async (req, res) => {
 // API required by task
 // --------------------
 
-// API Dịch vụ: Lấy danh sách đơn hàng (Admin)
-app.get("/api/service-orders", authenticateToken, (req, res) => {
-  if (req.user.role === "admin") {
-    res.json(serviceOrders || []);
-  } else {
-    const orders = (serviceOrders || []).filter(o => o.customerName === req.user.name);
+// API Dịch vụ: Lấy danh sách đơn hàng từ SQLite
+app.get("/api/service-orders", authenticateToken, async (req, res) => {
+  try {
+    const orders = await listServiceOrders({
+      isAdmin: req.user.role === "admin",
+      userId: req.user.id,
+      userName: req.user.name,
+    });
     res.json(orders);
+  } catch (err) {
+    return sendError(res, err);
   }
 });
 
-// API Dịch vụ: Tạo đơn hàng mới (Customer)
-app.post("/api/service-orders", authenticateToken, (req, res) => {
-  const { roomNumber, customerName, items, totalAmount, paymentMethod } = req.body || {};
+// API Dịch vụ: Tạo đơn hàng mới và lưu bền vững vào SQLite
+app.post("/api/service-orders", authenticateToken, async (req, res) => {
+  try {
+    const { roomNumber, customerName, items, totalAmount, paymentMethod } = req.body || {};
+    const normalizedRoomNumber = String(roomNumber || "").trim();
+    const normalizedItems = normalizeServiceOrderItems(items);
 
-  const amount = Number(totalAmount) || 0;
-  const newOrder = {
-    id: serviceOrders.length + 1,
-    roomNumber,
-    customerName,
-    items,
-    totalAmount: amount,
-    status: "Pending", // Mặc định trạng thái ban đầu là Đang phục vụ
-    paymentMethod: 'qr',
-    createdAt: new Date().toISOString()
-  };
+    if (!normalizedRoomNumber) return res.status(400).json({ error: "Vui lòng nhập số phòng." });
+    if (!normalizedItems.length) return res.status(400).json({ error: "Vui lòng chọn ít nhất một dịch vụ." });
 
-  serviceOrders.push(newOrder);
+    const computedAmount = normalizedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const requestedAmount = Number(totalAmount);
+    const amount = computedAmount > 0 ? computedAmount : (Number.isFinite(requestedAmount) ? requestedAmount : 0);
+    const name = customerName || req.user.name || "Khách hàng";
 
-  // Ghi nhận trực tiếp vào Doanh thu đã thu (QR Flow)
-  collectedRevenue += amount;
+    const result = await db.dbRunP(
+      `INSERT INTO service_orders
+        (room_number, customer_id, customer_name, items_json, total_amount, status, payment_method, payment_date)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP)`,
+      [
+        normalizedRoomNumber,
+        req.user.id,
+        name,
+        JSON.stringify(normalizedItems),
+        amount,
+        paymentMethod || "qr",
+      ]
+    );
 
-  res.status(201).json(newOrder);
+    const created = await getServiceOrderById(result.lastID);
+    res.status(201).json(created);
+  } catch (err) {
+    return sendError(res, err);
+  }
 });
 
 // API Dịch vụ: Cập nhật trạng thái hoàn thành (Admin)
-app.patch("/api/service-orders/:id", authenticateToken, (req, res) => {
+app.patch("/api/service-orders/:id", authenticateToken, async (req, res) => {
   if (req.user.role !== "admin") return res.status(403).json({ error: "Forbidden" });
-  const { id } = req.params;
-  const order = serviceOrders.find(o => o.id === parseInt(id));
-  if (order) {
-    order.status = "Completed";
-    return res.json(order);
+
+  try {
+    const result = await db.dbRunP(
+      `UPDATE service_orders
+       SET status = 'completed',
+           payment_date = COALESCE(payment_date, CURRENT_TIMESTAMP),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [req.params.id]
+    );
+    if (result.changes === 0) return res.status(404).json({ error: "Order not found" });
+
+    const updated = await getServiceOrderById(req.params.id);
+    res.json(updated);
+  } catch (err) {
+    return sendError(res, err);
   }
-  res.status(404).json({ error: "Order not found" });
 });
 
 // GET hạng phòng: Standard, VIP, Suite
@@ -1218,8 +1338,8 @@ app.get("/api/rooms", authenticateToken, async (req, res) => {
   const roomsWithRevenue = sourceRooms.map(room => {
     const roomRevenue = bookingRows
       .filter(b =>
-        String(b.roomId) === String(room.number) &&
-        normalizeStatus(b.status) !== "cancelled"
+        roomMatchesBooking(room, b) &&
+        !bookingStatusIsCancelled(b.status)
       )
       .reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
 
@@ -1332,17 +1452,14 @@ app.put("/api/rooms/:id/status", authenticateToken, async (req, res) => {
   }
 });
 
-// GET dịch vụ: Cafe muối, Trà mãng cầu
+// GET dịch vụ: lấy danh sách dịch vụ đang active từ SQLite
 app.get("/api/services", authenticateToken, (req, res) => {
   const getter = db.getPublicServicesLanding;
   if (typeof getter !== "function") return res.json([]);
 
   getter((err, rows) => {
     if (err) return sendError(res, err);
-
-    const allowedNames = new Set(["Cafe muối", "Trà mãng cầu"]);
-    const filtered = (rows || []).filter((s) => allowedNames.has(s.name));
-    res.json(filtered);
+    res.json(rows || []);
   });
 });
 
@@ -1356,7 +1473,12 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
     if (!finalRoomId || !checkIn || !checkOut) return res.status(400).json({ error: "Thiếu thông tin phòng hoặc ngày tháng" });
     if (new Date(checkOut) <= new Date(checkIn)) return res.status(400).json({ error: "Ngày trả phải sau ngày nhận." });
 
-    const roomPrice = await getRoomPriceForBooking(finalRoomId);
+    const room = await findRoomByIdentifier(finalRoomId);
+    if (!room) return res.status(404).json({ error: "Không tìm thấy phòng." });
+
+    const finalRoomNumber = String(room.number);
+    const finalRoomDbId = room.id;
+    const roomPrice = Number(room.price) || 0;
     const amount = resolveBookingAmount({ totalAmount, roomPrice, checkIn, checkOut });
     const bookingCustomerId = customer_id || req.user.id;
 
@@ -1366,12 +1488,12 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
       const overlap = await db.dbGetP(
         `SELECT id
          FROM bookings
-         WHERE CAST(room_id AS TEXT) = CAST(? AS TEXT)
+         WHERE CAST(room_id AS TEXT) IN (CAST(? AS TEXT), CAST(? AS TEXT))
            AND LOWER(status) NOT IN ('cancelled', 'canceled')
            AND date(?) < date(check_out)
            AND date(?) > date(check_in)
          LIMIT 1`,
-        [String(finalRoomId), checkIn, checkOut]
+        [finalRoomNumber, String(finalRoomDbId), checkIn, checkOut]
       );
 
       if (overlap) {
@@ -1381,9 +1503,9 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
 
       insertResult = await db.dbRunP(
         "INSERT INTO bookings (room_id, customer_id, check_in, check_out, total_amount, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [finalRoomId, bookingCustomerId, checkIn, checkOut, amount, "pending", "Chờ admin xác nhận"]
+        [finalRoomNumber, bookingCustomerId, checkIn, checkOut, amount, "pending", "Chờ admin xác nhận"]
       );
-      await db.dbRunP("UPDATE rooms SET status = 'reserved', updated_at = CURRENT_TIMESTAMP WHERE number = ?", [String(finalRoomId)]);
+      await db.dbRunP("UPDATE rooms SET status = 'reserved', updated_at = CURRENT_TIMESTAMP WHERE number = ?", [finalRoomNumber]);
       await db.dbRunP("COMMIT");
     } catch (err) {
       await db.dbRunP("ROLLBACK").catch(() => {});
@@ -1394,12 +1516,15 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
 
     const newBooking = {
       id: insertResult.lastID,
-      roomId: finalRoomId,
+      roomId: finalRoomNumber,
+      roomNumber: finalRoomNumber,
+      roomDbId: finalRoomDbId,
       customerId: bookingCustomerId,
       customerName: customerName || "Khách hàng",
       phone,
       checkIn,
       checkOut,
+      roomPrice,
       totalAmount: amount,
       status: "pending",
       paymentMethod: "qr",
@@ -1440,18 +1565,21 @@ app.patch("/api/admin/bookings/:id", authenticateToken, async (req, res) => {
   try {
     const current = await getBookingById(id);
     if (!current) return res.status(404).json({ error: "Booking not found" });
+    const currentRoom = await findRoomByIdentifier(current.roomNumber || current.roomId);
+    const currentRoomNumber = String(currentRoom?.number || current.roomNumber || current.roomId);
+    const currentRoomDbId = currentRoom?.id || current.roomDbId || currentRoomNumber;
 
     if (status === "confirmed" && normalizeStatus(current.status) !== "confirmed") {
       const overlap = await db.dbGetP(
         `SELECT id
          FROM bookings
          WHERE id <> ?
-           AND CAST(room_id AS TEXT) = CAST(? AS TEXT)
+           AND CAST(room_id AS TEXT) IN (CAST(? AS TEXT), CAST(? AS TEXT))
            AND LOWER(status) IN ('pending', 'confirmed')
            AND date(?) < date(check_out)
            AND date(?) > date(check_in)
          LIMIT 1`,
-        [id, String(current.roomId), current.checkIn, current.checkOut]
+        [id, currentRoomNumber, String(currentRoomDbId), current.checkIn, current.checkOut]
       );
       if (overlap) {
         return res.status(409).json({ error: "Không thể xác nhận vì phòng có lịch đặt trùng." });
@@ -1459,7 +1587,8 @@ app.patch("/api/admin/bookings/:id", authenticateToken, async (req, res) => {
     }
 
     await db.dbRunP("UPDATE bookings SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [status, id]);
-    await syncRoomStatusFromBookings(current.roomId);
+    await completeDueCheckouts({ force: true });
+    await syncRoomStatusFromBookings(currentRoomNumber);
 
     const updated = await getBookingById(id);
     return res.json(updated);
@@ -1545,9 +1674,10 @@ app.get("/api/admin/stats", authenticateToken, async (req, res) => {
       dailyData[d.toISOString().split("T")[0]] = 0;
     }
 
-    const [bookingRows, latestRooms] = await Promise.all([
+    const [bookingRows, latestRooms, serviceOrderRows] = await Promise.all([
       listBookings({ isAdmin: true }),
       loadRoomsFromDatabase().catch(() => rooms),
+      listServiceOrders({ isAdmin: true }),
     ]);
 
     // Lọc doanh thu từ bookings đã lưu trong database, không dùng biến RAM sau deploy
@@ -1564,8 +1694,8 @@ app.get("/api/admin/stats", authenticateToken, async (req, res) => {
       filteredBookingCount += 1;
     });
 
-    // Lọc doanh thu từ dịch vụ đang có trong phiên chạy hiện tại
-    serviceOrders.forEach((o) => {
+    // Lọc doanh thu từ dịch vụ đã lưu bền vững trong SQLite
+    serviceOrderRows.forEach((o) => {
       if (!o.createdAt) return;
       const oDate = new Date(o.createdAt);
       if (Number.isNaN(oDate.getTime()) || oDate < startDate) return;

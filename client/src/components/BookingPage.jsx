@@ -34,6 +34,14 @@ function getRoomImage(room) {
   return room?.imageUrl || room?.image_url || room?.image || ROOM_IMAGE_FALLBACKS[room?.type] || ROOM_IMAGE_FALLBACKS.Standard;
 }
 
+function normalizeRoomStatus(status) {
+  return String(status || "available").toLowerCase();
+}
+
+function isRoomAvailable(room) {
+  return normalizeRoomStatus(room?.status) === "available";
+}
+
 export default function BookingPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -43,7 +51,6 @@ export default function BookingPage() {
   const hotelState = useSelector((state) => state?.hotel || {});
   const user = hotelState?.user || null;
   const roomsFromStore = hotelState?.rooms || [];
-  const bookingsFromStore = hotelState?.bookings || [];
   const initialFormState = {
     name: user?.name || "",
     phone: user?.phone || "",
@@ -51,30 +58,6 @@ export default function BookingPage() {
     checkOut: "",
     roomType: "Standard",
     roomNumber: ""
-  };
-
-  // Hàm tính toán trạng thái phòng động dựa trên lịch sử đặt phòng
-  const isRoomAvailable = (room, bookings) => {
-    // Nếu admin đánh dấu bảo trì, ưu tiên hiển thị bảo trì
-    if (room?.status === "maintenance") return false;
-
-    const now = new Date();
-    now.setHours(0, 0, 0, 0); // So sánh theo ngày
-
-    // Tìm các đơn đặt phòng của phòng này mà chưa bị hủy
-    const roomBookings = bookings.filter(b =>
-      Number(b.room_id || b.roomId) === Number(room.id || room.number) &&
-      !["Cancelled", "cancelled"].includes(b.status)
-    );
-
-    // Kiểm tra xem có booking nào đang chiếm dụng phòng ở thời điểm hiện tại không
-    const isOccupiedNow = roomBookings.some(b => {
-      const checkIn = new Date(b.check_in || b.checkIn);
-      const checkOut = new Date(b.check_out || b.checkOut);
-      return now >= checkIn && now < checkOut;
-    });
-
-    return !isOccupiedNow;
   };
 
   // 1. Group all useState hooks at the top
@@ -91,21 +74,17 @@ export default function BookingPage() {
   const actualStoreRooms = Array.isArray(roomsFromStore) ? roomsFromStore : (roomsFromStore?.rooms || []);
   const sourceRooms = actualStoreRooms.length > 0 ? actualStoreRooms : ROOMS;
   const displayRooms = sourceRooms.map(sourceRoom => {
-    const localRoom = ROOMS.find(r => Number(r?.id) === Number(sourceRoom?.id || sourceRoom?.number)) || {};
-    const roomId = Number(sourceRoom?.id || sourceRoom?.number || localRoom?.id);
-
-    // Tính toán trạng thái động thay vì dùng thuộc tính status tĩnh
-    const available = isRoomAvailable(sourceRoom || localRoom, bookingsFromStore);
-    let status = available ? "available" : (sourceRoom?.status || "occupied");
-
-    // Giữ nguyên logic đặc biệt cũ cho phòng 302 như yêu cầu
-    if (roomId === 302) status = "available";
+    const sourceKey = sourceRoom?.number || sourceRoom?.id;
+    const localRoom = ROOMS.find(r => String(r?.id) === String(sourceKey)) || {};
+    const roomId = sourceRoom?.id || sourceRoom?.number || localRoom?.id;
+    const roomNumber = sourceRoom?.number || String(roomId);
+    const status = normalizeRoomStatus(sourceRoom?.status || localRoom?.status);
 
     return {
       ...localRoom,
       ...sourceRoom,
       id: roomId,
-      number: sourceRoom?.number || String(roomId),
+      number: roomNumber,
       summary: localRoom.summary || `${sourceRoom?.type || "Standard"} tiện nghi, sạch sẽ và phù hợp cho kỳ nghỉ của bạn.`,
       image: getRoomImage({ ...localRoom, ...sourceRoom }),
       status: status
@@ -147,10 +126,13 @@ export default function BookingPage() {
     
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return { nights: 0, total: 0, isValid: false };
 
-    const priceMap = { Standard: 550000, VIP: 950000, Suite: 1800000 };
     const nights = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     const validNights = nights > 0 ? nights : 0;
-    const pricePerNight = priceMap[form.roomType] || 0;
+    const selectedRoom = displayRooms.find(r =>
+      String(r?.number || r?.id) === String(form.roomNumber) ||
+      String(r?.id) === String(form.roomNumber)
+    );
+    const pricePerNight = Number(selectedRoom?.price) || 0;
     return { nights: validNights, total: validNights * pricePerNight, isValid: true };
   };
 
@@ -159,13 +141,16 @@ export default function BookingPage() {
     const { isValid } = calculateStay();
     if (!isValid) return;
 
-    setSelectedRoomForPayment(displayRooms.find(r => Number(r.id) === Number(form.roomNumber)));
+    setSelectedRoomForPayment(displayRooms.find(r =>
+      String(r?.number || r?.id) === String(form.roomNumber) ||
+      String(r?.id) === String(form.roomNumber)
+    ));
     setShowPaymentModal(true);
   };
 
   const triggerBooking = (room) => {
-    if (room?.status !== 'available') return;
-    setForm({ ...form, roomType: room?.type, roomNumber: room?.id });
+    if (!isRoomAvailable(room)) return;
+    setForm({ ...form, roomType: room?.type, roomNumber: room?.number || String(room?.id) });
     setShowForm(true);
   };
 
@@ -190,8 +175,8 @@ export default function BookingPage() {
           "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
-          roomId: Number(form?.roomNumber),
-          room_id: Number(form?.roomNumber), 
+          roomId: form?.roomNumber,
+          room_id: form?.roomNumber,
           customer_id: user?.id || null,     
           customerName: form?.name || user?.name || "Guest",
           phone: form?.phone ?? "",
@@ -258,9 +243,9 @@ export default function BookingPage() {
           <div key={room.id} className="group relative flex flex-col bg-white rounded-3xl shadow-md border border-slate-100 overflow-hidden hover:shadow-xl transition-all duration-300">
             <div className="p-5 flex-1 pr-24">
               <div className="flex items-center gap-2 mb-2">
-                {/* Vòng tròn trạng thái: Đỏ (Available) / Xanh (Occupied) */}
+                {/* Vòng tròn trạng thái phòng */}
                 <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${
-                  room?.status === 'available' ? 'bg-rose-500' : 'bg-emerald-500'
+                  isRoomAvailable(room) ? 'bg-emerald-500' : 'bg-amber-500'
                 }`} />
                 <h3 className="text-lg font-bold text-slate-800">Phòng {room.number || room.id}</h3>
                 <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
@@ -284,12 +269,12 @@ export default function BookingPage() {
                 </button>
                 <button 
                   onClick={() => triggerBooking(room)}
-                  disabled={room?.status !== 'available'}
+                  disabled={!isRoomAvailable(room)}
                   className={`px-3 py-2 text-[10px] font-bold text-white bg-sky-600 rounded-xl hover:bg-sky-700 shadow-md shadow-sky-600/20 transition ${
-                    room?.status !== 'available' ? 'opacity-50 cursor-not-allowed grayscale' : ''
+                    !isRoomAvailable(room) ? 'opacity-50 cursor-not-allowed grayscale' : ''
                   }`}
                 >
-                  {room?.status === 'available' ? 'Đặt phòng' : 'Hết phòng'}
+                  {isRoomAvailable(room) ? 'Đặt phòng' : 'Hết phòng'}
                 </button>
               </div>
             </div>
@@ -304,7 +289,7 @@ export default function BookingPage() {
                   e.currentTarget.src = ROOM_IMAGE_FALLBACKS.Standard;
                 }}
               />
-              {room.status !== 'available' && (
+              {!isRoomAvailable(room) && (
                 <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] flex items-center justify-center">
                   <span className="text-[10px] font-bold text-white uppercase tracking-tighter">Hết phòng</span>
                 </div>
@@ -402,7 +387,7 @@ export default function BookingPage() {
           ) : (
             <div className="bg-white p-6 rounded-3xl shadow-xl max-w-sm w-full text-center border border-slate-100">
               <h3 className="text-xl font-bold mb-4 text-slate-800">Thanh toán đặt phòng</h3>
-              <p className="mb-1 text-slate-600 font-medium">Phòng: {selectedRoomForPayment?.id}</p>
+              <p className="mb-1 text-slate-600 font-medium">Phòng: {selectedRoomForPayment?.number || selectedRoomForPayment?.id}</p>
               <p className="mb-4 text-sky-600 font-black text-lg">{total.toLocaleString("vi-VN")} VNĐ</p>
 
               <div className="flex justify-center mb-6">
